@@ -1,21 +1,14 @@
 # Acceptance criteria — Provenance Guard
 
-Five criteria that say what "working" means for this service, written in unit 7
-**before** you built it.
+Five criteria that say what "working" means for this service, written in Unit 7 **before** you built it.
 
 **All five are yours.** None are given.
 
-An acceptance criterion names a number or something plainly observable. *"The
-detector is accurate"* is an opinion — and perfect AI detection isn't possible
-anyway, so it's an opinion about something nobody can deliver. *"Of 10 pieces I
-wrote myself, at most 1 is labelled high-confidence AI"* is a criterion.
+An acceptance criterion names a number or something plainly observable. "The detector is accurate" is an opinion — and perfect AI detection isn't possible anyway, so it's an opinion about something nobody can deliver. "Of 10 pieces I wrote myself, at most 1 is labelled high-confidence AI" is a criterion.
 
-Under each, write a sentence or two on **why that target**. *"I allow at most 1
-false positive in 10 because on a writing site a wrong accusation costs more
-than a missed detection"* is a real answer.
+Under each, write a sentence or two on **why that target**. "I allow at most 1 false positive in 10 because on a writing site a wrong accusation costs more than a missed detection" is a real answer.
 
-> Missing your own targets next unit costs you nothing. Setting a target so
-> easy you can't miss it does.
+> Missing your own targets next unit costs you nothing. Setting a target so easy you can't miss it does.
 
 ---
 
@@ -23,82 +16,58 @@ than a missed detection"* is a real answer.
 
 **Cover at least three of these five areas.** They're prompts, not a form.
 
-| Area | A question it could answer |
-|---|---|
-| False positives | How often may a human's writing get called AI? |
-| Score spread | How far apart should clearly-AI and clearly-human text score? |
-| Label coverage | Is every one of your three labels actually reachable? |
-| The appeal path | Does an appeal always change status and always get recorded? |
-| Bad input | What happens when `text` is missing, empty, or enormous? |
+| Area            | A question it could answer                                    |
+| --------------- | ------------------------------------------------------------- |
+| False positives | How often may a human's writing get called AI?                |
+| Score spread    | How far apart should clearly-AI and clearly-human text score? |
+| Label coverage  | Is every one of your three labels actually reachable?         |
+| The appeal path | Does an appeal always change status and always get recorded?  |
+| Bad input       | What happens when `text` is missing, empty, or enormous?      |
 
 Two things worth knowing before you pick numbers:
 
-- **The expensive mistake is one-sided.** Missing some AI text costs the site a
-  little. Accusing a real writer costs that person a lot. A criterion that
-  treats both errors as equally bad is describing a system nobody would ship.
-- **Unit 8 tests across three trials, and the target has to hold across all
-  three.** Your first signal runs a model, so identical input can score
-  differently twice. A target of "at most 1 in 10" against trials of 2, 1, 2 is
-  a **miss**.
-
----
-## 1.
-
-<!-- Your criterion. It must name a number. -->
-
-
-
-**Why this target:**
-
-
+- **The expensive mistake is one-sided.** Missing some AI text costs the site a little. Accusing a real writer costs that person a lot. A criterion that treats both errors as equally bad is describing a system nobody would ship.
+- **Unit 8 tests across three trials, and the target has to hold across all three.** Your first signal runs a model, so identical input can score differently twice. A target of "at most 1 in 10" against trials of 2, 1, 2 is a **miss**.
 
 ---
 
-## 2.
+## 1. False positives
 
-<!-- Your criterion. -->
+In each of the three trials, no more than 1 out of 10 human-written samples may receive a high-confidence AI result (`guess: "ai"`). The 10 samples must be written without AI assistance, saved in the project, and committed before testing begins. The same 10 samples must be used in all three trials. Each sample must meet the `/submit` input requirements and receive a valid HTTP 200 response. An unexpected HTTP 400 means the trial does not pass; an HTTP 429 must be retried after the rate-limit window resets and must not reduce the sample count.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A false accusation can unfairly damage a real writer's credibility. One false positive allows a limited margin for an imperfect detector in this initial 10-sample test, while a second would exceed the 10% limit. This keeps the tolerance strict without assuming that a detector can eliminate every false positive.
 
 ---
 
-## 3.
+## 2. Score spread
 
-<!-- Your criterion. -->
+In each of the three trials, the average combined score for 10 AI-generated samples must be at least 0.30 higher than the average combined score for the same 10 human-written samples used in Criterion 1. The AI samples must be generated by one identified AI model and version, without human editing, and saved with their generation prompts before testing begins. Both sample sets must remain unchanged across all three trials. Every sample must meet the `/submit` input requirements and receive a valid HTTP 200 response. An unexpected HTTP 400 means the trial does not pass; an HTTP 429 must be retried after the rate-limit window resets and must not reduce the sample count.
 
-
-
-**Why this target:**
-
-
+**Why this target:** The combined score should meaningfully distinguish AI-generated writing from human writing. A difference of at least 0.30 provides a measurable separation target while recognizing that the two groups may not be perfectly distinguishable.
 
 ---
 
-## 4.
+## 3. Label coverage
 
-<!-- Your criterion. -->
+In each of the three trials, a predefined set of valid test inputs submitted through the actual `/submit` endpoint must produce at least one response with `guess: "human"`, one with `guess: "unsure"`, and one with `guess: "ai"`. The test inputs must be saved before testing begins, and the response JSON for each successful result must be retained as evidence. Trials must be paced within the configured rate limit; any HTTP 429 response must be retried after the rate-limit window resets.
 
-
-
-**Why this target:**
-
-
+**Why this target:** All three outcomes need to be reachable for the service to provide useful results at different levels of AI-likeness. Testing actual endpoint responses confirms that the scoring thresholds produce all three outcomes rather than merely checking that the labels exist in the code.
 
 ---
 
-## 5.
+## 4. Appeal recording and decision preservation
 
-<!-- Your criterion. -->
+In each of the three trials, at least three valid appeals submitted for existing decisions through `/appeal` must receive HTTP 200 responses confirming `under_review` status. Each appeal must create a new audit entry, and the latest status must be verified by reading the audit log in entry order, not by comparing timestamps. The original decision, label, and scores must match the earlier `/submit` response and original audit entry and remain unchanged after the appeals.
 
+**Why this target:** An appeal must be traceable without silently overwriting the original result. Recording each appeal and comparing the original decision against its earlier response and audit entry preserves an auditable history while allowing the appeal to be reviewed separately.
 
+---
 
-**Why this target:**
+## 5. Invalid submission rejection
 
+In each of the three trials, all defined invalid `/submit` input cases must return HTTP 400 with the appropriate error code: `invalid_request` for a non-object request body, `missing_field` for missing required fields, `invalid_field` for non-string or whitespace-only values, `field_too_long` for text exceeding 2,000 characters or `creator_id` exceeding 200 characters, and `text_too_short` for text containing fewer than three GPT-2 tokens. Rejected submissions must not receive a content ID or create a decision record. Any HTTP 429 response must be retried after the rate-limit window resets and must not count as a failed rejection test. For each invalid request, the audit log must be checked immediately before and after the request. Any new rejection entry is allowed, but no new entry attributable to that request may have `status: "decided"` or represent a completed decision.
 
+**Why this target:** Invalid input should be rejected before a decision is made. This protects the service from processing incomplete, malformed, or excessively large submissions and keeps rejected requests separate from valid decisions while allowing rejection events to be recorded for auditing.
 
 ---
 
