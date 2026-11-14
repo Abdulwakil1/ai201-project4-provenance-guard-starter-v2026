@@ -259,13 +259,25 @@ The current word-matching pattern may also recognize zero words in punctuation-o
      diagnostics. -->
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+$ curl -i -X POST http://127.0.0.1:5000/submit \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"I went to the store this morning and picked up a few things before work.","creator_id":"test-user"}'
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
 ```
 
 ```json
-
+{
+  "confidence": 0.5,
+  "content_id": "ca50574a-e383-4a79-99e9-0e032f867889",
+  "guess": "unsure",
+  "label": "not built yet",
+  "model_score": 0.8049,
+  "style_score": null
+}
 ```
 
 **An appeal**
@@ -283,11 +295,26 @@ $ curl -X POST http://127.0.0.1:5000/appeal \
 **What the log shows afterwards**
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+$ curl -i http://127.0.0.1:5000/log
 ```
 
 ```json
-
+{
+  "count": 1,
+  "entries": [
+    {
+      "combined_score": null,
+      "content_id": "ca50574a-e383-4a79-99e9-0e032f867889",
+      "creator_id": "test-user",
+      "guess": "unsure",
+      "label": "not built yet",
+      "model_score": 0.8049,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-14T00:24:24+00:00"
+    }
+  ]
+}
 ```
 
 ---
