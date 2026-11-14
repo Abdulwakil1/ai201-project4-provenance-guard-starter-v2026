@@ -21,7 +21,7 @@ import config
 
 def combine_signals(model_score: float, style_score: float) -> float:
     """
-    Combine two 0–1 signals into one 0–1 score. ← TODO (Milestone 4)
+    Combine two 0–1 signals into one 0–1 score. (Milestone 4)
 
     Both inputs point the same way: higher means more likely AI. Your output
     should too.
@@ -49,10 +49,9 @@ def combine_signals(model_score: float, style_score: float) -> float:
       - Milestone 4 asks you to find a case where your two signals split and
         write it down. That case is what this rule exists to handle.
 
-    The weights in config.py are placeholders. Change them, or ignore them and
-    write a different rule.
+        The weights in config.py determine each signal's contribution.
     """
-    # TODO: replace this
+    # Equal-weight average: disagreement pulls the combined score toward 0.5.
     return (
         config.WEIGHT_MODEL_SIGNAL * model_score
         + config.WEIGHT_STYLE_SIGNAL * style_score

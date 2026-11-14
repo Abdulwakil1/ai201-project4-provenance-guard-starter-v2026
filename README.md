@@ -214,7 +214,12 @@ The current word-matching pattern may also recognize zero words in punctuation-o
 
 **The rule:**
 
+The system uses an equal-weight average of the model signal and style signal. Each contributes 50% to the final score. When the signals disagree, their average moderates the result rather than allowing either signal to determine the outcome alone.
+
 **The numbers:**
+
+- Model signal: 0.50 (50%)
+- Style signal: 0.50 (50%)
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -222,6 +227,8 @@ The current word-matching pattern may also recognize zero words in punctuation-o
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
+
+The borderline sample about technology produced a model score of 0.8099 and a style score of 0.3014. The model signal leaned AI-like, while the style signal leaned human-like. Their equal-weight average is approximately 0.5557, bringing the combined result closer to the uncertain middle rather than strongly favoring either signal.
 
 ---
 
