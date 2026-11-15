@@ -39,21 +39,21 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
-1. `app.py` receives the submitted text and creator ID through the `/submit` endpoint. It validates the request and rejects missing, empty or whitespace-only, non-string, non-object, or oversized input with HTTP 400 and a JSON error message before either signal runs. The maximum input length is 2,000 characters. For text shorter than three tokens, `detector.py` raises a `ValueError` (raised while step 2 runs), which `app.py` catches and returns as HTTP 400. Rejected submissions do not receive a decision or an audit entry in Unit 7. For valid submissions, `app.py` generates a unique `content_id`, which can later identify the submission during an appeal.
+1. `app.py` receives the submitted text and creator ID through the `/submit` endpoint. It validates the request and rejects missing, empty or whitespace-only, non-string, non-object, or oversized input with HTTP 400 and a JSON error message before either signal runs. The maximum input length is 2,000 characters. For text shorter than three GPT-2 tokens, `detector.py` raises a `ValueError`, which `app.py` catches and returns as HTTP 400. Rejected submissions do not receive a decision or an audit entry. For valid submissions, `app.py` generates a unique `content_id`, which can later identify the submission during an appeal.
 
 2. `detector.py` analyzes how predictable the text is using a local GPT-2 model and produces the `model_score`, a value between 0 and 1. A higher score indicates more predictable, AI-like writing. The model processes up to 400 tokens. If a submission exceeds 400 tokens, only the first 400 tokens affect the `model_score`, even if the remaining text is within the 2,000-character limit.
 
-3. `stylometry.py` measures the text's writing characteristics, including sentence-length variation, vocabulary repetition through the ratio of unique words to total words, and punctuation density. It produces the `style_score`, also between 0 and 1, where a higher score indicates more AI-like characteristics. The exact punctuation measurement will be decided in Milestone 4.
+3. `stylometry.py` measures the text's writing characteristics: sentence-length variation, vocabulary repetition through the ratio of unique words to total words, and punctuation density. It produces the `style_score`, also between 0 and 1, where a higher score indicates more AI-like characteristics. Punctuation density is calculated as a separate diagnostic measure and is not included in the style score.
 
-4. `scoring.py`, through `combine_signals()`, combines the model score and style score into one combined score between 0 and 1. The final combining rule and weights will be decided in Milestone 4 rather than relying on the starter's temporary 50/50 average.
+4. `scoring.py`, through `combine_signals()`, combines the model score and style score into one combined score between 0 and 1. The implementation uses an equal-weight average: 50% model score and 50% style score. Both signals point in the same direction, with higher scores indicating more AI-like writing.
 
-5. `scoring.py`, through `score_to_label()`, applies the thresholds supplied by `config.py` to classify the combined score. The planned initial thresholds are 0.35 and 0.65: scores at or below 0.35 receive the high-confidence human label, scores at or above 0.65 receive the high-confidence AI label, and scores between them receive the unsure label.
+5. `scoring.py`, through `score_to_label()`, applies the thresholds supplied by `config.py` to classify the combined score. Scores at or below 0.35 receive the high-confidence human label, scores at or above 0.65 receive the high-confidence AI label, and scores between those thresholds receive the unsure label.
 
-6. `audit.py` records the content ID, creator ID, individual signal scores, combined score, guess, label, decision status, and timestamp in an append-only audit log. A new decision starts with the status `decided`; after an appeal, a new entry is appended with the latest status `under_review`, without overwriting the original decision.
+6. `audit.py` records the content ID, creator ID, individual signal scores, combined score, guess, label, decision status, and timestamp in an append-only audit log. A new decision starts with the status `decided`; after an appeal, a new entry is appended with the status `under_review`, without overwriting the original decision.
 
-7. Finally, `app.py` returns the result through the `/submit` response, including the `content_id`, `guess`, `confidence`, `label`, `model_score`, and `style_score`. The `confidence` field contains the combined score itself, representing AI-likeness on a 0–1 scale rather than a calibrated probability of AI authorship. A low value indicates human-leaning writing, while a high value indicates AI-leaning writing; therefore, a low value does not mean low certainty.
+7. Finally, `app.py` returns the result through the `/submit` response, including the `content_id`, `guess`, `confidence`, `label`, `model_score`, `style_score`, and `combined_score`. The `confidence` field contains the combined score itself, representing AI-likeness on a 0–1 scale rather than a calibrated probability of AI authorship. A low value indicates human-leaning writing, while a high value indicates AI-leaning writing.
 
-After receiving the result, a writer who disagrees with the decision can use the `/appeal` endpoint, providing the `content_id` and their reasoning to request a review.
+After receiving the result, a writer who disagrees with the decision can use the `/appeal` endpoint, providing the `content_id` and their reasoning to request a review. The endpoint verifies that the submission exists and records the appeal without changing the original decision.
 
 ### POST `/submit` — Submission Contract
 
@@ -70,14 +70,15 @@ The `/submit` endpoint accepts a JSON object containing the text to analyze and 
 
 When a submission is valid and both signals have been calculated, the endpoint returns a JSON response containing the decision and its supporting scores.
 
-| Field         | Type   | Description                                                                                                                                                                  |
-| ------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content_id`  | string | Unique UUID4 identifier assigned to the submission.                                                                                                                          |
-| `guess`       | string | Classification result. Values are exactly `ai`, `human`, or `unsure`.                                                                                                        |
-| `confidence`  | number | Combined AI-likeness score between 0 and 1. This is a score, not a calibrated probability. Lower values indicate human-leaning text; higher values indicate AI-leaning text. |
-| `label`       | string | Full reader-facing sentence explaining the classification, as defined in Label Variants.                                                                                     |
-| `model_score` | number | AI-likeness score produced by the language-model signal, between 0 and 1.                                                                                                    |
-| `style_score` | number | AI-likeness score produced by the stylometric signal, between 0 and 1.                                                                                                       |
+| Field            | Type   | Description                                                                                                                                                                  |
+| ---------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content_id`     | string | Unique UUID4 identifier assigned to the submission.                                                                                                                          |
+| `guess`          | string | Classification result. Values are exactly `ai`, `human`, or `unsure`.                                                                                                        |
+| `confidence`     | number | Combined AI-likeness score between 0 and 1. This is a score, not a calibrated probability. Lower values indicate human-leaning text; higher values indicate AI-leaning text. |
+| `label`          | string | Full reader-facing sentence explaining the classification, as defined in Label Variants.                                                                                     |
+| `model_score`    | number | AI-likeness score produced by the language-model signal, between 0 and 1.                                                                                                    |
+| `style_score`    | number | AI-likeness score produced by the stylometric signal, between 0 and 1.                                                                                                       |
+| `combined_score` | number | Final AI-likeness score calculated by combining the model and style signals.                                                                                                 |
 
 The initial decision is recorded in the audit log with status `decided`. The successful response does not include a separate `status` field.
 
@@ -91,7 +92,7 @@ The endpoint returns HTTP 400 for the following cases:
 - `text` or `creator_id` is missing from the request: `missing_field`.
 - `text` or `creator_id` is present but is not a string, or contains only whitespace: `invalid_field`.
 - `text` exceeds 2,000 characters or `creator_id` exceeds 200 characters: `field_too_long`.
-- The GPT-2 tokenizer identifies fewer than three tokens in the text: `text_too_short`. This minimum is based on GPT-2 tokens, not ordinary word count. A confirmed short-input example will be added after tokenizer testing in Milestone 3.
+- The GPT-2 tokenizer identifies fewer than three tokens in the text: `text_too_short`. This minimum is based on GPT-2 tokens, not ordinary word count.
 
 Error responses use a consistent JSON structure. The `error` field identifies the specific failure, while `message` explains the reason:
 
@@ -106,7 +107,7 @@ Unexpected server errors are outside the scope of the Unit 7 endpoint contract.
 
 **Open Implementation Consideration — Stylometry Input**
 
-The current stylometry word-matching pattern recognizes English letters, digits, and apostrophes. Inputs containing only punctuation or unsupported characters, including some accented or non-English text, may produce zero recognized words. Milestone 4 will address this edge case to prevent calculation errors and document the limitations of the stylometric signal.
+The current stylometry word-matching pattern recognizes English letters, digits, and apostrophes. Inputs containing only punctuation or unsupported characters, including some accented or non-English text, may produce zero recognized words. The implementation handles this edge case by returning 0.0 for the individual measures and a neutral 0.5 for the overall style signal when no words are recognized. However, the signal remains limited by its English-oriented word-matching pattern and does not interpret the meaning or language of the text.
 
 ### POST `/appeal` — Appeal Contract
 
@@ -153,13 +154,13 @@ This is ordinary human writing, but both signals could interpret its predictable
 
 - **Model score:** 0.78 — the conventional wording could be predictable to GPT-2.
 - **Style score:** 0.70 — the relatively uniform sentence lengths could lean AI-like.
-- **Combined score:** 0.74 — using the planned equal weighting of the two signals.
+- **Combined score:** 0.74 — using the implemented equal weighting of the two signals.
 
-With the planned AI threshold of 0.65, the writer would receive an AI classification. The provisional reader-facing wording is: "This text may have been generated by AI." The final label wording will be established in Milestone 5. The `/submit` response also includes `confidence`, which represents the combined AI-likeness score; whether a client displays that number alongside the label is outside this endpoint contract.
+With the implemented AI threshold of 0.65, the writer would receive an AI classification. The reader-facing label would be: "We think this was probably written by AI." The `/submit` response also includes `confidence`, which represents the combined AI-likeness score rather than a calibrated probability. Whether a client displays that number alongside the label is outside this endpoint contract.
 
 The label itself does not mention the appeal option, so the writer must know that `POST /appeal` is available. The writer can submit an appeal using the returned `content_id` and an explanation. The appeal is recorded as a new audit entry, and the content's latest status becomes `under_review`. It does not automatically rerun either signal, change the original scores, or revise the label or decision already returned.
 
-This hypothetical case shows that equal weighting alone cannot protect against correlated false positives: when both signals lean AI-like for the same human-written text, averaging can reinforce the mistake. Milestone 4 will examine the combining rule, and the threshold and weighting decisions will need to account for the possibility that both signals fail together. The example does not establish a new threshold or weighting value.
+This hypothetical case shows that equal weighting alone cannot protect against correlated false positives: when both signals lean AI-like for the same human-written text, averaging can reinforce the mistake. The current implementation uses equal weighting and thresholds of 0.35 and 0.65. These choices are documented implementation decisions, not evidence that the system reliably avoids false positives. The example remains hypothetical and does not represent a measured test result.
 
 ---
 
@@ -191,21 +192,27 @@ This implementation also uses GPT-2, an older and smaller language model, and sc
 
 **What it measures:**
 
-The style signal is designed to examine three writing characteristics: sentence-length variation, type-token ratio, and punctuation density. Sentence-length variation measures how much sentence lengths differ from one another. Type-token ratio measures the proportion of unique words among all recognized words. Punctuation density measures how frequently punctuation appears relative to the text.
+The style signal examines three writing characteristics: sentence-length variation, type-token ratio, and punctuation density.
 
-These measures will be combined into a score between 0 and 1, where a higher score indicates more AI-like writing. The intended direction is to treat lower sentence-length variation as more AI-like, so that measure must be inverted when contributing to the score. A lower type-token ratio may indicate more repetitive vocabulary and will be treated as an AI-like tendency, although text length affects this measure. Punctuation density will provide another stylistic feature, but its direction and contribution will be decided in Milestone 4.
+- Sentence-length variation measures how much recognized-word counts differ across sentences. It uses the sample standard deviation divided by the mean sentence length, capped at 1.0.
+- Type-token ratio measures the proportion of unique recognized words among all recognized words. A lower ratio indicates more vocabulary repetition.
+- Punctuation density measures punctuation characters relative to the number of recognized words. It is calculated as a separate diagnostic measure and is not included in the style score.
+
+The `style_score` ranges from 0 to 1, with higher values indicating more AI-like characteristics. For text containing at least two sentences with recognized words, the score averages two inverted measures: 1 minus sentence-length variation and 1 minus type-token ratio. For text with fewer than two such sentences, the score uses the inverted type-token ratio alone. If no words are recognized, the function returns a neutral style score of 0.5.
 
 **Why that might differ between human and AI writing:**
 
-AI-generated writing may use relatively consistent sentence structures, repeat vocabulary, and follow recognizable punctuation patterns. Human writing may show more variation in sentence length, word choice, and punctuation because of individual writing habits. These are tendencies rather than reliable indicators of authorship. The three measures are designed to capture different aspects of writing style, not to establish whether a person or an AI produced the text.
+AI-generated writing may use relatively consistent sentence structures and repeat vocabulary. Human writing may show more variation in sentence length and word choice because of individual writing habits. These are tendencies rather than reliable indicators of authorship. The style signal captures characteristics of writing, not proof that a person or an AI produced it.
 
-Although the model signal and style signal measure different properties, they are not independent and can fail together. For example, plain, conventional human writing may be predictable to GPT-2 while also having relatively uniform sentence lengths, causing both signals to lean AI-like. Their actual behavior and contribution to the final score will be checked in Milestone 4.
+Although the model signal and style signal measure different properties, they are not independent and can fail together. For example, conventional human writing may be predictable to GPT-2 while also having relatively uniform sentence lengths, causing both signals to lean AI-like. Because the system combines them using an equal-weight average, correlated errors can reinforce one another.
 
 **What it can't see:**
 
-A human writer who consistently uses short, similarly structured sentences may appear more AI-like based on sentence-length variation. Conversely, AI-generated text deliberately written with varied sentence lengths may appear more human-like. Very short submissions are another limitation: a single-sentence submission does not provide enough sentences to calculate sentence-length variation using standard deviation, and a short text can produce an unstable type-token ratio. Type-token ratio also has a length limitation: longer texts tend to repeat words more often, so a short text and a long text are not directly comparable using this measure alone. Punctuation density cannot distinguish ordinary individual writing habits from deliberately generated punctuation patterns.
+A human writer who consistently uses short, similarly structured sentences may appear more AI-like based on sentence-length variation. Conversely, AI-generated text deliberately written with varied sentence lengths may appear more human-like. Very short submissions provide limited stylistic evidence: a single sentence cannot establish sentence-length variation, and a short text can produce an unstable type-token ratio. Type-token ratio also has a length limitation: longer texts tend to repeat words more often, so short and long texts are not directly comparable using this measure alone.
 
-The current word-matching pattern may also recognize zero words in punctuation-only text or text containing unsupported characters, including some accented or non-English writing. This creates a potential division-by-zero error in type-token ratio. Milestone 4 will define and implement safe behavior for this case, including what the function returns when no words are recognized. The **Open Implementation Consideration — Stylometry Input** paragraph above documents this issue.
+Punctuation density cannot distinguish ordinary individual writing habits from deliberately generated punctuation patterns. Although it is calculated, it does not contribute to the final style score.
+
+The current word-matching pattern recognizes English letters, digits, and apostrophes. It may not recognize some accented or non-English words. When no words are recognized, the implementation avoids division-by-zero errors by returning 0.0 for the individual measures and 0.5 for the overall style score. This fallback prevents a calculation error, but it does not make the style signal reliable for unsupported languages or text without recognized words.
 
 ### The combining rule
 
@@ -214,7 +221,7 @@ The current word-matching pattern may also recognize zero words in punctuation-o
 
 **The rule:**
 
-The system uses an equal-weight average of the model signal and style signal. Each contributes 50% to the final score. When the signals disagree, their average moderates the result rather than allowing either signal to determine the outcome alone.
+The system uses an equal-weight average of the model signal and style signal. Each contributes 50% to the final score. When the signals disagree, their average places the combined score between the two individual scores, balancing their contributions equally.
 
 **The numbers:**
 
@@ -239,11 +246,11 @@ The borderline sample about technology produced a model score of 0.8099 and a st
 
      Write them for someone who has never heard the word "threshold". -->
 
-| Label                 | Score range | The exact text a reader sees |
-| --------------------- | ----------- | ---------------------------- |
-| high-confidence human |             |                              |
-| unsure                |             |                              |
-| high-confidence AI    |             |                              |
+| Label                 | Score range                          | The exact text a reader sees                                                  |
+| --------------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| high-confidence human | 0.00–0.35                            | We think this was probably written by a person.                               |
+| unsure                | Greater than 0.35 and less than 0.65 | We couldn't confidently determine whether this was written by a person or AI. |
+| high-confidence AI    | 0.65–1.00                            | We think this was probably written by AI.                                     |
 
 **Why I worded the "unsure" one this way:**
 
@@ -251,12 +258,16 @@ The borderline sample about technology produced a model score of 0.8099 and a st
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
 
+The wording communicates uncertainty without accusing the writer. It acknowledges that the system cannot always confidently distinguish human-written text from AI-generated text.
+
 ---
 
 ## Sample Run
 
 <!-- One submission and one appeal, pasted as text: the request, the response,
      and the log entries. -->
+
+The following example demonstrates a successful submission, the resulting classification, an accepted appeal, and the corresponding audit log entries.
 
 **A submission**
 
@@ -266,63 +277,72 @@ The borderline sample about technology produced a model score of 0.8099 and a st
      diagnostics. -->
 
 ```bash
-$ curl -i -X POST http://127.0.0.1:5000/submit \
+$ curl -s -X POST http://127.0.0.1:5000/submit \
   -H 'Content-Type: application/json' \
-  -d '{"text":"I went to the store this morning and picked up a few things before work.","creator_id":"test-user"}'
-```
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
+  -d '{"text":"I believe this is a useful test of the content review system. It is important to evaluate writing carefully and fairly.","creator_id":"milestone5-test"}'
 ```
 
 ```json
 {
-  "confidence": 0.5,
-  "content_id": "ca50574a-e383-4a79-99e9-0e032f867889",
+  "combined_score": 0.43215000000000003,
+  "confidence": 0.43215000000000003,
+  "content_id": "61bb3c29-2c82-4f8c-bf4d-424abb55031e",
   "guess": "unsure",
-  "label": "not built yet",
-  "model_score": 0.8049,
-  "style_score": null
+  "label": "We couldn't confidently determine whether this was written by a person or AI.",
+  "model_score": 0.4415,
+  "style_score": 0.4228
 }
 ```
 
 **An appeal**
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+$ curl -s -X POST http://127.0.0.1:5000/appeal \
+  -H 'Content-Type: application/json' \
+  -d '{"content_id":"61bb3c29-2c82-4f8c-bf4d-424abb55031e","reasoning":"I wrote this content myself. Please review the classification because the system may have incorrectly assessed my writing."}'
 ```
 
 ```json
-
+{
+  "content_id": "61bb3c29-2c82-4f8c-bf4d-424abb55031e",
+  "message": "Appeal submitted successfully.",
+  "status": "under_review"
+}
 ```
 
 **What the log shows afterwards**
 
 ```bash
-$ curl -i http://127.0.0.1:5000/log
+$ curl -s http://127.0.0.1:5000/log
 ```
 
+The log contained four entries. The following two entries belong to the submission and appeal demonstrated above:
+
 ```json
-{
-  "count": 1,
-  "entries": [
-    {
-      "combined_score": null,
-      "content_id": "ca50574a-e383-4a79-99e9-0e032f867889",
-      "creator_id": "test-user",
-      "guess": "unsure",
-      "label": "not built yet",
-      "model_score": 0.8049,
-      "status": "decided",
-      "style_score": null,
-      "timestamp": "2026-11-14T00:24:24+00:00"
-    }
-  ]
-}
+[
+  {
+    "combined_score": 0.43215000000000003,
+    "content_id": "61bb3c29-2c82-4f8c-bf4d-424abb55031e",
+    "creator_id": "milestone5-test",
+    "guess": "unsure",
+    "label": "We couldn't confidently determine whether this was written by a person or AI.",
+    "model_score": 0.4415,
+    "status": "decided",
+    "style_score": 0.4228,
+    "timestamp": "2026-11-15T05:39:32+00:00"
+  },
+  {
+    "content_id": "61bb3c29-2c82-4f8c-bf4d-424abb55031e",
+    "creator_id": "milestone5-test",
+    "event": "appeal",
+    "reasoning": "I wrote this content myself. Please review the classification because the system may have incorrectly assessed my writing.",
+    "status": "under_review",
+    "timestamp": "2026-11-15T05:42:13+00:00"
+  }
+]
 ```
+
+The original decision remains unchanged, and the appeal is recorded as a separate audit entry. The latest entry establishes the submission's current status as `under_review`.
 
 ---
 

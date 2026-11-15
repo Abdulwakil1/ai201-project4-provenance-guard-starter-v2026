@@ -247,24 +247,24 @@ def submit():
 
     style_score = stylometry.style_signal(text)
     combined_score = scoring.combine_signals(model_score, style_score)
-
+    guess, label = scoring.score_to_label(combined_score)
     content_id = str(uuid.uuid4())
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
-        guess="unsure",
+        guess=guess,
         model_score=model_score,
         style_score=style_score,
         combined_score=combined_score,
-        label="not built yet",
+        label=label,
         status="decided",
     )
 
     return jsonify({
         "content_id": content_id,
-        "guess": "unsure",
-        "confidence": 0.5,
-        "label": "not built yet",
+        "guess": guess,
+        "confidence": combined_score,
+        "label": label,
         "model_score": model_score,
         "style_score": style_score,
         "combined_score": combined_score,
@@ -272,11 +272,10 @@ def submit():
 
 
 
-
 @app.post("/appeal")
 def appeal():
     """
-    A writer says you got it wrong. ← TODO — Milestone 5
+    A writer says you got it wrong.
 
     Expects JSON:
         {"content_id": "...", "reasoning": "..."}
@@ -293,14 +292,72 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
 
-    # TODO: delete this and build the route.
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "invalid_request",
+            "message": "Request body must be a JSON object.",
+        }), 400
+
+    if "content_id" not in payload or "reasoning" not in payload:
+        return jsonify({
+            "error": "missing_field",
+            "message": "Both content_id and reasoning are required.",
+        }), 400
+
+    content_id = payload["content_id"]
+    reasoning = payload["reasoning"]
+
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({
+            "error": "invalid_field",
+            "message": "content_id must be a non-empty string.",
+        }), 400
+
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return jsonify({
+            "error": "invalid_field",
+            "message": "reasoning must be a non-empty string.",
+        }), 400
+
+    if len(reasoning) > 2000:
+        return jsonify({
+            "error": "field_too_long",
+            "message": "reasoning must not exceed 2000 characters.",
+        }), 400
+
+    content_id = content_id.strip()
+    reasoning = reasoning.strip()
+
+    entries = audit.entries_for(content_id)
+
+    if not entries:
+        return jsonify({
+            "error": "content_not_found",
+            "message": "No decision was found for this content_id.",
+        }), 404
+
+    creator_id = entries[0].get("creator_id")
+
+    if not creator_id:
+        return jsonify({
+            "error": "creator_not_found",
+            "message": "The original decision has no creator_id.",
+        }), 500
+
+    appeal_entry = audit.log_appeal(
+        content_id=content_id,
+        creator_id=creator_id,
+        reasoning=reasoning,
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "message": "Appeal submitted successfully.",
+        "content_id": content_id,
+        "status": appeal_entry["status"],
+    }), 200
+
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
