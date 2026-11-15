@@ -348,17 +348,17 @@ The original decision remains unchanged, and the appeal is recorded as a separat
 
 ## How I Used AI
 
-**Moment 1**
+**Moment 1 — Implementing the appeal endpoint**
 
-- _What I asked for:_
-- _What came back:_
-- _What I changed:_
+- _What I asked for:_ Help reviewing the `/appeal` endpoint, particularly how to validate an appeal and verify that its `content_id` belongs to an existing decision.
+- _What came back:_ Guidance to validate the JSON body and fields, look up the original decision using `audit.entries_for()`, retrieve its `creator_id`, and record the appeal using `audit.log_appeal()`.
+- _What I changed:_ I implemented those validation and lookup steps, connected the endpoint to the audit functions, and tested invalid requests and a successful appeal. The endpoint appends an `under_review` entry without overwriting the original decision.
 
-**Moment 2**
+**Moment 2 — Checking the style signal documentation**
 
-- _What I asked for:_
-- _What came back:_
-- _What I changed:_
+- _What I asked for:_ Help checking whether my README explanation of the style signal accurately described what the code calculates.
+- _What came back:_ A review that distinguished the three calculated measures from the two that contribute to `style_score`, and identified limitations involving short text, unsupported words, and punctuation density.
+- _What I changed:_ I revised the README to match the implementation: sentence-length variation and type-token ratio contribute to the style score, while punctuation density is diagnostic only. I also documented edge cases and limitations rather than presenting the signal as proof of authorship.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
