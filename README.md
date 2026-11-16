@@ -39,7 +39,7 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
-1. `app.py` receives the submitted text and creator ID through the `/submit` endpoint. It validates the request and rejects missing, empty or whitespace-only, non-string, non-object, or oversized input with HTTP 400 and a JSON error message before either signal runs. The maximum input length is 2,000 characters. For text shorter than three GPT-2 tokens, `detector.py` raises a `ValueError`, which `app.py` catches and returns as HTTP 400. Rejected submissions do not receive a decision or an audit entry. For valid submissions, `app.py` generates a unique `content_id`, which can later identify the submission during an appeal.
+1. `app.py` receives the submitted text and creator ID through the `/submit` endpoint. It validates the request and rejects missing, empty or whitespace-only, non-string, non-object, or oversized input with HTTP 400 and a JSON error message before either signal runs. The maximum input length is 2,000 characters. For text shorter than three GPT-2 tokens, `detector.py` raises a `ValueError`, which `app.py` catches and returns as HTTP 400. Rejected submissions do not receive a decision or a `content_id`, but each route-level rejection is recorded in the audit log with its timestamp, creator ID when valid (otherwise `unknown`), and rejection reason. For valid submissions, `app.py` generates a unique `content_id`, which can later identify the submission during an appeal.
 
 2. `detector.py` analyzes how predictable the text is using a local GPT-2 model and produces the `model_score`, a value between 0 and 1. A higher score indicates more predictable, AI-like writing. The model processes up to 400 tokens. If a submission exceeds 400 tokens, only the first 400 tokens affect the `model_score`, even if the remaining text is within the 2,000-character limit.
 
@@ -49,7 +49,7 @@
 
 5. `scoring.py`, through `score_to_label()`, applies the thresholds supplied by `config.py` to classify the combined score. Scores at or below 0.35 receive the high-confidence human label, scores at or above 0.65 receive the high-confidence AI label, and scores between those thresholds receive the unsure label.
 
-6. `audit.py` records the content ID, creator ID, individual signal scores, combined score, guess, label, decision status, and timestamp in an append-only audit log. A new decision starts with the status `decided`; after an appeal, a new entry is appended with the status `under_review`, without overwriting the original decision.
+6. `audit.py` records successful decisions in an append-only audit log with all nine decision fields: timestamp, content ID, creator ID, guess, model score, style score, combined score, label, and status. A new decision starts with the status `decided`; after an appeal, a new entry is appended with the status `under_review`, without overwriting the original decision. Rejected requests are recorded separately as rejection events with a timestamp, creator ID when valid (otherwise `unknown`), status `rejected`, and a reason. Rejection entries do not contain decision scores because no decision was made.
 
 7. Finally, `app.py` returns the result through the `/submit` response, including the `content_id`, `guess`, `confidence`, `label`, `model_score`, `style_score`, and `combined_score`. The `confidence` field contains the combined score itself, representing AI-likeness on a 0–1 scale rather than a calibrated probability of AI authorship. A low value indicates human-leaning writing, while a high value indicates AI-leaning writing.
 
@@ -84,7 +84,7 @@ The initial decision is recorded in the audit log with status `decided`. The suc
 
 **Error Responses — HTTP 400**
 
-Invalid submissions are rejected before a decision is made. Rejected submissions do not receive a `content_id` or an audit decision and therefore cannot be appealed.
+Invalid submissions are rejected before a decision is made. Rejected submissions do not receive a `content_id` or an audit decision and therefore cannot be appealed. These HTTP 400 rejections are nevertheless recorded in the audit log as rejection events, with a timestamp, creator ID when valid (otherwise `unknown`), status `rejected`, and a reason.
 
 The endpoint returns HTTP 400 for the following cases:
 
@@ -366,7 +366,7 @@ The original decision remains unchanged, and the appeal is recorded as a separat
 
 ## Rate Limiting
 
-**My limits:** **_ per minute, _** per day
+**My limits:** 10 per minute, 200 per day
 
 **Why those numbers and not others:**
 
@@ -375,16 +375,35 @@ The original decision remains unchanged, and the appeal is recorded as a separat
      thresholds. Your numbers have to be liveable for the first and hostile to
      the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+These limits allow a legitimate writer to submit multiple pieces of work while restricting automated scripts that repeatedly submit content to probe the detector. Ten submissions per minute provides a reasonable short-term limit, while 200 per day allows normal usage without permitting unlimited requests.
+
+**What a caller counts as:**
+Requests are counted by `creator_id` when a valid creator ID is provided. If it is missing or invalid, the limiter falls back to the caller's IP address. This helps prevent one creator from bypassing the limit by sending requests from different addresses.
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
-```
+```text
+15 submissions as 'flood_tester'
 
+[ 1/15] 200
+[ 2/15] 200
+[ 3/15] 200
+[ 4/15] 200
+[ 5/15] 200
+[ 6/15] 200
+[ 7/15] 200
+[ 8/15] 200
+[ 9/15] 200
+[10/15] 200
+[11/15] 429
+[12/15] 429
+[13/15] 429
+[14/15] 429
+[15/15] 429
+
+5 of 15 were rate limited.
 ```
 
 ---

@@ -154,7 +154,7 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
@@ -204,46 +204,63 @@ def submit():
     """
     payload = request.get_json(silent=True)
 
-    if not isinstance(payload, dict):
+    creator_id_for_log = "unknown"
+    if isinstance(payload, dict):
+        candidate_creator_id = payload.get("creator_id")
+        if (
+            isinstance(candidate_creator_id, str)
+            and candidate_creator_id.strip()
+            and len(candidate_creator_id) <= 200
+        ):
+            creator_id_for_log = candidate_creator_id.strip()
+
+    def reject(reason, message):
+        audit.log_rejection(
+            creator_id=creator_id_for_log,
+            reason=reason,
+        )
         return jsonify({
-            "error": "invalid_request",
-            "message": "Request body must be a JSON object."
+            "error": reason,
+            "message": message,
         }), 400
 
+    if not isinstance(payload, dict):
+        return reject(
+            "invalid_request",
+            "Request body must be a JSON object.",
+        )
+
     if "text" not in payload or "creator_id" not in payload:
-        return jsonify({
-            "error": "missing_field",
-            "message": "Both text and creator_id are required."
-        }), 400
+        return reject(
+            "missing_field",
+            "Both text and creator_id are required.",
+        )
 
     text = payload["text"]
     creator_id = payload["creator_id"]
 
     if not isinstance(text, str) or not text.strip():
-        return jsonify({
-            "error": "invalid_field",
-            "message": "text must be a non-empty string."
-        }), 400
+        return reject(
+            "invalid_field",
+            "text must be a non-empty string.",
+        )
 
     if not isinstance(creator_id, str) or not creator_id.strip():
-        return jsonify({
-            "error": "invalid_field",
-            "message": "creator_id must be a non-empty string."
-        }), 400
+        return reject(
+            "invalid_field",
+            "creator_id must be a non-empty string.",
+        )
 
     if len(text) > 2000 or len(creator_id) > 200:
-        return jsonify({
-            "error": "field_too_long",
-            "message": "text must not exceed 2000 characters and creator_id must not exceed 200 characters."
-        }), 400
+        return reject(
+            "field_too_long",
+            "text must not exceed 2000 characters and creator_id must not exceed 200 characters.",
+        )
 
     try:
         model_score = detector.model_signal(text)
     except ValueError as exc:
-        return jsonify({
-            "error": "text_too_short",
-            "message": str(exc),
-        }), 400
+        return reject("text_too_short", str(exc))
 
     style_score = stylometry.style_signal(text)
     combined_score = scoring.combine_signals(model_score, style_score)
