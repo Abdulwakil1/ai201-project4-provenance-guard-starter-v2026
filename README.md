@@ -410,19 +410,143 @@ Requests are counted by `creator_id` when a valid creator ID is provided. If it 
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+<!-- Full attack outcomes and verdicts: `results/attack_run_2026-11-17_0322.md` -->
 
-**Ten audit log entries from the run**
+**Attack results:** 56 attacks were tested. **43 HELD and 13 BROKE.**
 
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
+The complete attack-by-attack results, including HTTP status, classification, scores, and human-reviewed verdicts, are recorded in [`results/attack_run_2026-11-17_0322.md`](results/attack_run_2026-11-17_0322.md).
+
+### Ten audit log entries from the run
+
+These entries include successful decisions, validation rejections, and rate-limit rejections.
 
 ```json
-
+[
+  {
+    "combined_score": 0.6846,
+    "content_id": "2bdcb8af-b97c-4ac7-ac88-435488725e46",
+    "creator_id": "attacker_FP05",
+    "guess": "ai",
+    "label": "We think this was probably written by AI.",
+    "model_score": 0.8005,
+    "status": "decided",
+    "style_score": 0.5687,
+    "timestamp": "2026-11-17T08:22:05+00:00"
+  },
+  {
+    "combined_score": 0.3239,
+    "content_id": "3f4a8b5c-abfd-433b-892a-2805221c80e6",
+    "creator_id": "attacker_EV01",
+    "guess": "human",
+    "label": "We think this was probably written by a person.",
+    "model_score": 0.1635,
+    "status": "decided",
+    "style_score": 0.4843,
+    "timestamp": "2026-11-17T08:21:59+00:00"
+  },
+  {
+    "combined_score": 0.8109999999999999,
+    "content_id": "523442d5-e3de-4ca8-aef0-f27e8377b871",
+    "creator_id": "attacker_EV10",
+    "guess": "ai",
+    "label": "We think this was probably written by AI.",
+    "model_score": 0.9792,
+    "status": "decided",
+    "style_score": 0.6428,
+    "timestamp": "2026-11-17T08:22:03+00:00"
+  },
+  {
+    "combined_score": 0.0,
+    "content_id": "0b4aed27-259e-4738-b03f-e5da9a4fa894",
+    "creator_id": "attacker_MF03",
+    "guess": "human",
+    "label": "We think this was probably written by a person.",
+    "model_score": 0.0,
+    "status": "decided",
+    "style_score": 0.0,
+    "timestamp": "2026-11-17T08:22:08+00:00"
+  },
+  {
+    "combined_score": 0.7484500000000001,
+    "content_id": "563db827-fc9c-462a-8736-b7c17a7f9123",
+    "creator_id": "attacker_MF06",
+    "guess": "ai",
+    "label": "We think this was probably written by AI.",
+    "model_score": 0.9969,
+    "status": "decided",
+    "style_score": 0.5,
+    "timestamp": "2026-11-17T08:22:09+00:00"
+  },
+  {
+    "combined_score": 0.4605,
+    "content_id": "d470d353-e15b-4b94-8037-cddc746bb77b",
+    "creator_id": "attacker_PI05",
+    "guess": "unsure",
+    "label": "We couldn't confidently determine whether this was written by a person or AI.",
+    "model_score": 0.6401,
+    "status": "decided",
+    "style_score": 0.2809,
+    "timestamp": "2026-11-17T08:22:07+00:00"
+  },
+  {
+    "creator_id": "attacker_RQ03",
+    "event": "rejected",
+    "reason": "invalid_field",
+    "status": "rejected",
+    "timestamp": "2026-11-17T08:22:10+00:00"
+  },
+  {
+    "creator_id": "unknown",
+    "event": "rejected",
+    "reason": "missing_field",
+    "status": "rejected",
+    "timestamp": "2026-11-17T08:22:10+00:00"
+  },
+  {
+    "creator_id": "attacker_flood",
+    "event": "rejected",
+    "limit": "10 per 1 minute",
+    "reason": "rate_limited",
+    "status": "rejected",
+    "timestamp": "2026-11-17T08:22:12+00:00"
+  },
+  {
+    "creator_id": "attacker_flood",
+    "event": "rejected",
+    "limit": "10 per 1 minute",
+    "reason": "rate_limited",
+    "status": "rejected",
+    "timestamp": "2026-11-17T08:22:12+00:00"
+  }
+]
 ```
 
-**The single worst outcome** — the one I'd least want to explain to a writer
-whose work got caught by it:
+### The single worst outcome
+
+The failure I would least want to explain to a writer whose work was incorrectly flagged:
+
+**Attack FP05 — Technical documentation targeted as human-written**
+
+**Input:**
+
+> To configure the service, edit the settings file in the installation directory. Set the host value to the address the service should bind to. Set the port value to an unused port above 1024. Save the file and restart the service. The service will log its startup configuration. If the port is already in use, the service will exit with an error. Check the log file for details before retrying.
+
+**System response:**
+
+- HTTP status: `200`
+- Guess: `ai`
+- Combined score: `0.6846`
+- Model signal: `0.8005`
+- Style signal: `0.5687`
+- Label: "We think this was probably written by AI."
+
+**Diagnosis:**
+
+The primary weakness was the model signal. The text had low GPT-2 perplexity (18.9), producing a high model score of 0.8005. The style signal also leaned AI-like: its relatively uniform sentence lengths contributed to a style score of 0.5687.
+
+The scoring rule gave both signals equal weight (0.5 each). Their average was 0.6846, exceeding the AI threshold of 0.65, so the label mapping classified the submission as AI-written.
+
+The underlying limitation is that conventional, predictable technical writing can also have low perplexity and uniform sentence structure. Consequently, genuine human writing can be incorrectly flagged. The attack set identifies this input as human-written; authorship was not independently verified.
 
 ---
 
