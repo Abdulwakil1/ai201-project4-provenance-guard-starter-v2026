@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import sys
+import time
 from pathlib import Path
 
 import config
@@ -60,10 +61,14 @@ def bodies_for(scenario):
 
 def describe(body):
     """A short, readable note of what was sent — for the report."""
-    if set(body) == {"text", "creator_id"} and isinstance(body.get("text"), str):
+    if (
+        isinstance(body, dict)
+        and set(body) == {"text", "creator_id"}
+        and isinstance(body.get("text"), str)
+    ):
         text = body["text"]
         return text[:70] if text else "(empty text)"
-    return json.dumps(body)[:120]
+    return json.dumps(body, ensure_ascii=False)[:120]
 
 
 def main():
@@ -107,6 +112,7 @@ def main():
         print(f"!! {args.trials} trial(s). The submission asks for three.\n")
 
     rows = []
+    request_count = 0
     for scenario in scenarios.SCENARIOS:
         print(f"\n{scenario['name']}  (criterion {scenario.get('criterion') or '—'})")
 
@@ -114,6 +120,9 @@ def main():
         for trial in range(1, args.trials + 1):
             results = []
             for i, body in enumerate(bodies_for(scenario), 1):
+                if request_count:
+                    time.sleep(7)
+                request_count += 1
                 preview = describe(body)
                 try:
                     response = requests.post(f"{args.url}/submit", json=body,
@@ -121,11 +130,13 @@ def main():
                     payload = response.json() if response.content else {}
                     results.append({
                         "status": response.status_code,
+                        "content_id": payload.get("content_id"),
                         "guess": payload.get("guess"),
                         "confidence": payload.get("confidence"),
                         "model_score": payload.get("model_score"),
                         "style_score": payload.get("style_score"),
                         "label": payload.get("label"),
+                        "response": payload,
                         "sent": preview,
                     })
                 except Exception as exc:  # noqa: BLE001
