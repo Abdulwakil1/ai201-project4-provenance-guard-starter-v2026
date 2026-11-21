@@ -552,21 +552,28 @@ The underlying limitation is that conventional, predictable technical writing ca
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
+<!-- Five original acceptance criteria, evaluated across three trials. -->
 
-| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
-| --------- | ------ | ----- | ----- | ----- | ------- |
-| 1.        |        |       |       |       |         |
-| 2.        |        |       |       |       |         |
-| 3.        |        |       |       |       |         |
-| 4.        |        |       |       |       |         |
-| 5.        |        |       |       |       |         |
+| Criterion              | Target                                                                        | Run 1                | Run 2                | Run 3                | Verdict |
+| ---------------------- | ----------------------------------------------------------------------------- | -------------------- | -------------------- | -------------------- | ------- |
+| 1. False positives     | At most 1/10 labeled `ai`; all 10 valid HTTP 200                              | 0/10; 10/10 HTTP 200 | 0/10; 10/10 HTTP 200 | 0/10; 10/10 HTTP 200 | MET     |
+| 2. Score spread        | AI mean at least 0.30 above human mean; both sets valid HTTP 200              | +0.065660            | +0.065660            | +0.065660            | MISSED  |
+| 3. Label coverage      | All three labels reached through `/submit`                                    | human, unsure, ai    | human, unsure, ai    | human, unsure, ai    | MET     |
+| 4. Appeal recording    | At least 3 successful appeals; audit entries and original decisions preserved | 3/3                  | 3/3                  | 3/3                  | MET     |
+| 5. Invalid submissions | All 7 cases rejected with correct HTTP 400 codes; no decision created         | 7/7                  | 7/7                  | 7/7                  | MET     |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+**After-run evidence:** [Evaluation results](results/run_2026-11-21_0508_after.md) · [Appeal results](results/appeal_run_2026-11-21_after.md)
+
+**Criterion 5 audit verification:** I manually reviewed `logs/audit.jsonl` after the three evaluation trials. All 21 invalid submissions produced one rejection event each, with the expected error reason and `status: "rejected"`. The entries had no `content_id` or completed decision fields, and none created a `status: "decided"` record. The `run_eval.py` runner recorded the HTTP responses but did not automate before-and-after audit snapshots; the audit-log verification was performed separately.
+
+**Real output from one trial**
+
+Source: `test_appeals.py`; application route `app.py::appeal`; audit function `audit.py::log_appeal`. Trial 1, three appeals:
 
 ```json
-
+{"submit_status":200,"appeal_status":200,"response_status":"under_review","new_appeal_entry":true,"latest_audit_status":"under_review","original_decision_preserved":true}
+{"submit_status":200,"appeal_status":200,"response_status":"under_review","new_appeal_entry":true,"latest_audit_status":"under_review","original_decision_preserved":true}
+{"submit_status":200,"appeal_status":200,"response_status":"under_review","new_appeal_entry":true,"latest_audit_status":"under_review","original_decision_preserved":true}
 ```
 
 **Diagnoses**
@@ -585,67 +592,80 @@ that produced it:
 
      Look for a pattern. Five failures on one signal is one problem, not five. -->
 
+- **Criterion 2 — score spread: MISSED.** The combining rule in `scoring.py::combine_signals` gives both signals equal weight (0.5 each). Across all three trials, the combined AI mean was only 0.065660 above the human mean, below the 0.30 target. The two signals, when averaged equally, did not produce enough separation between the tested human and AI samples. The evidence establishes the gap, but does not establish that changing either weight alone would fix it.
+
+- **Evasion — EV01, EV02, EV03, EV06, EV07: BROKE.** These attacks primarily targeted signal two, `stylometry.py::style_signal`. Its vocabulary and sentence-length measurements can be changed without changing who wrote the text: typos increase apparent word variety, while broken-up sentences and pasted quotations change sentence-length patterns. The signal interprets those changes as more human-like, lowering the combined score.
+
+- **Evasion — EV04: BROKE.** This attack targeted signal one, `detector.py::model_signal`. Unusual vocabulary raises perplexity, which lowers the model's AI-oriented score. The model therefore interprets an edited AI text as less predictable and more human-like.
+
+- **Evasion — EV05 and EV09: BROKE.** These attacks targeted both signals. Human editing can change vocabulary and sentence structure, while adding a human-written opening to AI-generated text creates mixed authorship within one submission. Neither signal can reliably identify that mixture. The equal-weight combining rule averages the two imperfect readings rather than detecting the change in authorship.
+
+- **Evasion — EV08: BROKE.** This short-text attack passed the route because the input was non-empty and within the character limit. Signal one accepted it because the tokenizer produced enough tokens to pass its minimum-length check, but returned a low AI score (0.2452). Signal two also returned a relatively low score (0.3586). The combining rule produced a human-range score, and the label mapping classified it as human.
+
+- **False positive — FP05: BROKE.** Both signals contributed. Signal one gave human-written technical documentation a high AI score (0.8005), consistent with its predictable language. Signal two also gave it a high score (0.5687), consistent with its regular sentence lengths and vocabulary patterns. The equal-weight combining rule produced 0.6846, above the 0.65 AI threshold, so the label mapping classified the human-written sample as AI.
+
+- **Malformed input — MF03, MF04, MF06: BROKE.** The route in `app.py::submit` checks for a non-empty string and a maximum length, but does not verify that the text contains meaningful words. The detector consequently scored control characters, punctuation, and emoji-only input instead of rejecting them. Signal two returns 0.5 when it finds no recognized words. The combining rule then produces scores that reach the label mapping: MF03 and MF04 were classified as human, while MF06 was classified as AI. These are decisions about malformed input, not reliable authorship assessments.
+
 ---
 
 ## The Improvement
 
 **What I changed:**
 
+I added route-level text validation in `app.py::submit` before either scoring signal runs. The route now rejects submissions containing unsupported control characters and submissions without at least one recognizable letter or number. These rejections are recorded in the audit log with the reason `invalid_text_content`.
+
 **Which diagnosis pointed at it:**
+
+The diagnosis of MF03, MF04, and MF06 showed that the original route accepted control-character-only, punctuation-only, and emoji-only submissions and allowed them to receive authorship classifications. The problem was at the route/input-validation stage, before either signal could provide a meaningful assessment.
 
 ### Attack Run — After
 
 <!-- Same format. `run_attacks.py --label after` -->
+
+**Attack results:** 56 attacks were tested. The runner reported zero automatic failures (5xx responses, crashes, or missing responses). After manual review, 12 attacks were marked BROKE and 44 HELD.
+
+The complete attack-by-attack results, including HTTP status, classification, scores, and verdicts, are recorded in [`results/attack_run_2026-11-21_0243_after.md`](results/attack_run_2026-11-21_0243_after.md).
+
+I reran the complete attack set using `python run_attacks.py --set attack_set --label after`. All 56 attacks were submitted and manually reviewed. The 12 BROKE attacks were EV01–EV09, FP05, PI01, and PI02; the remaining 44 were HELD. The complete verdicts are recorded in the linked report.
+
+The three previously broken malformed-input attacks now return HTTP 400:
+
+- MF03 — control characters: rejected (`invalid_text_content`).
+- MF04 — punctuation only: rejected (`invalid_text_content`).
+- MF06 — emoji only: rejected (`invalid_text_content`).
+
+The other malformed-input cases and all 12 request-validation cases also returned HTTP 400. The flood test produced ten accepted submissions followed by two HTTP 429 responses, consistent with the configured limit of 10 requests per minute.
+
+**Before-and-after comparison:**
+
+| Measure                                              |   Before |    After |
+| ---------------------------------------------------- | -------: | -------: |
+| Previously broken malformed cases (MF03, MF04, MF06) |        3 |        0 |
+| Total attacks marked BROKE                           |       13 |       12 |
+| Total attacks marked HELD                            |       43 |       44 |
+| Score spread (AI mean minus human mean)              | 0.065660 | 0.065660 |
 
 **Did it help, and how do I know:**
 
 <!-- Widening the unsure band usually fixes one problem and creates another.
      Reporting that trade honestly is worth full credit. -->
 
+Yes, it fixed the specific malformed-input weakness targeted by this improvement. The after-run report shows MF03, MF04, and MF06 returning HTTP 400 instead of receiving human or AI classifications, and the audit log records all three as rejected with `invalid_text_content`. However, this single change did not resolve the evasion attacks, the FP05 false positive, or the missed score-spread criterion.
+
 ---
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+**What remains unresolved and what I would do next:**
 
-**The trade I'd make if this ran for real:**
+- **Criterion 2 — score spread:** I would collect a broader, representative set of human and AI samples and investigate signal calibration and weighting. I stopped because the current results establish poor separation, but do not show that changing weights alone would solve it.
+- **Evasion — EV01–EV09:** I would improve resistance to superficial changes in vocabulary, punctuation, sentence structure, and mixed authorship. These failures involve both signals and, in some cases, their combination. I stopped because addressing them requires a broader change to the detection approach, not another route-validation adjustment.
+- **False positive — FP05:** I would test and calibrate the model against more human-written technical documentation before changing the AI threshold. I stopped because lowering false positives without measuring the effect on AI detection could create another weakness.
+- **Prompt injection — PI01 and PI02:** I would investigate whether embedded instructions affect the scoring signals and add targeted tests. Although both were marked BROKE, the observed classifications alone do not establish that the embedded instructions caused those results.
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+**The trade I would make if this ran for real:**
 
-<!-- ═════════════════════════════════════════════════════════════════════
-
-     SUBMISSION CHECKLIST — unit 7
-
-       [ ] criteria.md has five numbered criteria, each naming a target
-       [ ] Each has a reason underneath
-       [ ] POST /submit returns content_id, guess, confidence, label,
-           model_score and style_score
-       [ ] Two signals that measure DIFFERENT things, each with a named blind spot
-       [ ] Three label variants, all reachable, written out in full
-       [ ] POST /appeal changes status and writes to the log
-       [ ] Signals and Scoring names scoring.py::combine_signals
-       [ ] Sample Run: a submission AND an appeal, as pasted text
-       [ ] At least four new commits
-       [ ] Repository URL submitted — WRITE IT DOWN
-
-     SUBMISSION CHECKLIST — unit 8
-
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
-       [ ] The attack set run IN FULL, every input with an outcome
-       [ ] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
-       [ ] The SAME repository URL as last unit
-
-     Do not delete and recreate this repository.
-     ═════════════════════════════════════════════════════════════════════ -->
+I would prioritize avoiding false accusations by making borderline cases more likely to receive an `unsure` result rather than a confident AI label. The cost is that some AI-generated content would also receive `unsure` or avoid an AI classification, shifting more review work to moderators and users who depend on detection.
 
 ---
 

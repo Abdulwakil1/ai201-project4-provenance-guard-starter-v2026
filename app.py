@@ -25,6 +25,7 @@ Routes:
 """
 
 import uuid
+import unicodedata
 
 from flask import Flask, jsonify, request
 
@@ -255,6 +256,19 @@ def submit():
         return reject(
             "field_too_long",
             "text must not exceed 2000 characters and creator_id must not exceed 200 characters.",
+        )
+    if any(
+        unicodedata.category(char) == "Cc" and char not in "\n\r\t"
+        for char in text
+    ):
+        return reject(
+            "invalid_text_content",
+            "text must not contain unsupported control characters.",
+        )
+    if not stylometry.words(text):
+        return reject(
+            "invalid_text_content",
+            "text must contain at least one letter or number.",
         )
 
     try:
