@@ -360,6 +360,26 @@ The original decision remains unchanged, and the appeal is recorded as a separat
 - _What came back:_ A review that distinguished the three calculated measures from the two that contribute to `style_score`, and identified limitations involving short text, unsupported words, and punctuation density.
 - _What I changed:_ I revised the README to match the implementation: sentence-length variation and type-token ratio contribute to the style score, while punctuation density is diagnostic only. I also documented edge cases and limitations rather than presenting the signal as proof of authorship.
 
+### Unit 8
+
+**Moment 1 — Diagnosing attack and evaluation results**
+
+- _What I asked for:_ Help interpreting the attack-run results and evaluating my five acceptance criteria across three trials, including identifying why attacks were marked BROKE.
+- _What came back:_ Guidance to trace each failure through the five stages: route, signal one, signal two, combining rule, and label mapping. The review also helped distinguish measured failures from assumptions about why they occurred.
+- _What I changed:_ I reviewed the evidence, documented the failure mechanisms in the README, and recorded which criteria were MET or MISSED. I kept the original targets rather than changing them to make the results look better.
+
+**Moment 2 — Choosing and implementing the improvement**
+
+- _What I asked for:_ Help selecting one focused improvement based on the Unit 8 diagnosis, without attempting to fix unrelated weaknesses at the same time.
+- _What came back:_ A recommendation to address malformed input at the `/submit` route before either scoring signal runs, specifically rejecting unsupported control characters and text without recognizable letters or numbers.
+- _What I changed:_ I added the validation in `app.py::submit`, using Python `unicodedata` and the existing `stylometry.words()` function. I compiled the application and tested the rejection behavior before rerunning the attack set.
+
+**Moment 3 — Evaluating the improvement and documenting limitations**
+
+- _What I asked for:_ Help comparing the before-and-after results, interpreting the remaining failures, and checking that my README claims were supported by the reports and audit log.
+- _What came back:_ Guidance to distinguish the malformed-input cases that were fixed from the evasion attacks, false positive, prompt-injection cases, and score-spread criterion that remained unresolved. It also helped identify where the evidence did not establish causation.
+- _What I changed:_ I reviewed the results, documented the before-and-after comparison, preserved the remaining failures and production trade-off, and committed the final reports and README changes.
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
