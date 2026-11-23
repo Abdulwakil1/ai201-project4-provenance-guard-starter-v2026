@@ -161,6 +161,42 @@ class AppealRejectionTests(unittest.TestCase):
             0,
         )
 
+    @patch("detector.model_signal", return_value=0.2)
+    @patch("stylometry.style_signal", return_value=0.5)
+    @patch("scoring.combine_signals", return_value=0.35)
+    @patch("scoring.score_to_label", return_value=("human", "human"))
+    def test_successful_submission(
+        self,
+        mock_label,
+        mock_combine,
+        mock_style,
+        mock_model,
+    ):
+        response = self.client.post(
+            "/submit",
+            json={
+                "text": "This is a valid test submission.",
+                "creator_id": "creator-submit",
+            },
+        )
 
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["label"], "human")
+        self.assertEqual(body["model_score"], 0.2)
+        self.assertEqual(body["style_score"], 0.5)
+        self.assertEqual(body["combined_score"], 0.35)
+        self.assertTrue(body["content_id"])
+
+        mock_model.assert_called_once()
+        mock_style.assert_called_once()
+        mock_combine.assert_called_once()
+        mock_label.assert_called_once()
+
+        entries = audit.entries_for(body["content_id"])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["status"], "decided")
+        self.assertEqual(entries[0]["creator_id"], "creator-submit")
 if __name__ == "__main__":
     unittest.main(verbosity=2)
