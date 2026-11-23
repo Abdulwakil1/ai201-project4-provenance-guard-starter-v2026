@@ -325,38 +325,60 @@ def appeal():
     """
     payload = request.get_json(silent=True)
 
-    if not isinstance(payload, dict):
-        return jsonify({
-            "error": "invalid_request",
-            "message": "Request body must be a JSON object.",
-        }), 400
+    content_id_for_log = None
 
-    if "content_id" not in payload or "reasoning" not in payload:
+    def reject(reason, message, status=400):
+        creator_id_for_log = "unknown"
+        if content_id_for_log:
+            entries = audit.entries_for(content_id_for_log)
+            if entries:
+                creator_id_for_log = entries[0].get("creator_id") or "unknown"
+
+        audit.log_rejection(
+            creator_id=creator_id_for_log,
+            reason=reason,
+            endpoint="/appeal",
+            content_id=content_id_for_log,
+        )
         return jsonify({
-            "error": "missing_field",
-            "message": "Both content_id and reasoning are required.",
-        }), 400
+            "error": reason,
+            "message": message,
+        }), status
+
+    if not isinstance(payload, dict):
+        return reject(
+            "invalid_request",
+             "Request body must be a JSON object.",
+        )
+    if "content_id" not in payload or "reasoning" not in payload:
+        return reject(
+            "missing_field",
+            "Both content_id and reasoning are required.",
+        )
 
     content_id = payload["content_id"]
     reasoning = payload["reasoning"]
 
+    if isinstance(content_id, str) and content_id.strip():
+        content_id_for_log = content_id.strip()
+
     if not isinstance(content_id, str) or not content_id.strip():
-        return jsonify({
-            "error": "invalid_field",
-            "message": "content_id must be a non-empty string.",
-        }), 400
+        return reject(
+            "invalid_field",
+             "content_id must be a non-empty string.",
+        )
 
     if not isinstance(reasoning, str) or not reasoning.strip():
-        return jsonify({
-            "error": "invalid_field",
-            "message": "reasoning must be a non-empty string.",
-        }), 400
+        return reject(
+            "invalid_field",
+            "reasoning must be a non-empty string.",
+        )
 
     if len(reasoning) > 2000:
-        return jsonify({
-            "error": "field_too_long",
-            "message": "reasoning must not exceed 2000 characters.",
-        }), 400
+        return reject(
+            "field_too_long",
+            "reasoning must not exceed 2000 characters.",
+        )
 
     content_id = content_id.strip()
     reasoning = reasoning.strip()
@@ -364,18 +386,20 @@ def appeal():
     entries = audit.entries_for(content_id)
 
     if not entries:
-        return jsonify({
-            "error": "content_not_found",
-            "message": "No decision was found for this content_id.",
-        }), 404
+        return reject(
+            "content_not_found",
+            "No decision was found for this content_id.",
+            404,
+        )
 
     creator_id = entries[0].get("creator_id")
 
     if not creator_id:
-        return jsonify({
-            "error": "creator_not_found",
-            "message": "The original decision has no creator_id.",
-        }), 500
+         return reject(
+            "creator_not_found",
+            "The original decision has no creator_id.",
+             500,
+        )
 
     appeal_entry = audit.log_appeal(
         content_id=content_id,
