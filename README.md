@@ -690,3 +690,15 @@ I would prioritize avoiding false accusations by making borderline cases more li
 ---
 
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
+
+## Capstone
+
+**The Shape**
+
+I am extending Provenance Guard using Shape B — Harden Against Failure. The extension focuses on the `/appeal` endpoint: rejected appeals must return a consistent error response and create an audit record without changing the original decision. I will add repeatable tests to verify rejection behavior and audit integrity. The application will run locally with structured logs using Path B.
+
+**Out of Scope**
+
+- Changing the detection model, stylometry signal, scoring weights, or classification thresholds.
+- Reworking multilingual text detection or adding new detection capabilities.
+- Public hosting or redesigning the application interface.
