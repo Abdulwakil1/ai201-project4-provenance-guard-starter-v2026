@@ -55,6 +55,8 @@ class AppealRejectionTests(unittest.TestCase):
         self.assertEqual(len(rejected), 1)
         self.assertEqual(rejected[0]["reason"], reason)
         self.assertEqual(rejected[0]["endpoint"], "/appeal")
+        if rejected[0].get("content_id") is not None:
+            self.assertTrue(rejected[0]["content_id"])
 
         return rejected[0]
 
@@ -137,6 +139,32 @@ class AppealRejectionTests(unittest.TestCase):
         )
         self.assertEqual(entry["creator_id"], "unknown")
 
+    def test_rejected_appeal_preserves_original_decision(self):
+        original = audit.entries_for("content-123")[0].copy()
+
+        response = self.client.post(
+            "/appeal",
+            json={
+                "content_id": "content-123",
+                "reasoning": "x" * 2001,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        entries = audit.entries_for("content-123")
+        self.assertEqual(entries[0], original)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[1]["event"], "rejected")
+        self.assertEqual(entries[1]["reason"], "field_too_long")
+
+        rejected = [
+            entry for entry in audit.read_entries()
+            if entry.get("event") == "rejected"
+        ]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["reason"], "field_too_long")
+
     def test_successful_appeal_preserves_original_decision(self):
         original = audit.entries_for("content-123")[0].copy()
 
@@ -159,6 +187,22 @@ class AppealRejectionTests(unittest.TestCase):
         self.assertEqual(
             len([e for e in entries if e.get("event") == "rejected"]),
             0,
+        )
+
+    def test_ping(self):
+        response = self.client.post(
+            "/ping",
+            json={"message": "capstone check"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "ok": True,
+                "you_sent": "capstone check",
+                "service": "provenance-guard",
+            },
         )
 
     @patch("detector.model_signal", return_value=0.2)
