@@ -306,3 +306,44 @@ is evidence, and the entries you paste into your README are what unit 8 grades.
 
 **Do not delete and recreate this repository.** You submit the same URL both
 units.
+
+## Capstone — Path B: Local execution with logs
+
+Provenance Guard runs locally rather than on a hosted service. The GPT-2 model requires approximately 550 MB of disk space, in addition to the resources needed by PyTorch and the application. A 512 MB free hosting tier is not sufficient for this setup.
+
+### Environment requirements
+
+- Python 3.12.3 (the project supports Python 3.11–3.13).
+- A virtual environment.
+- Dependencies installed from `requirements.txt`.
+- Approximately 9 GB of free disk space.
+- Internet access on the first model load to download GPT-2.
+- No API key or hosted inference service.
+
+The model is downloaded automatically on the first request that requires scoring. Hugging Face caches the files locally for subsequent runs.
+
+### Start from a clean checkout
+
+From the cloned repository directory:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python test.py
+python app.py
+```
+
+The local service listens at `http://127.0.0.1:5000`.
+
+Use the `/health` endpoint to inspect service and detector status:
+
+```bash
+curl http://127.0.0.1:5000/health
+```
+
+### Runtime and instrumentation
+
+The application runs locally using Flask. Capstone execution records will be stored separately from the existing decision and appeal audit log. The run log will record the timestamp, input, output, duration, and failure details when applicable.
+
+The structured run log and measured execution cost will be documented in the Capstone sections of `README.md`.
