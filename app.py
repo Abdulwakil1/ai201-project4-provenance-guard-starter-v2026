@@ -26,8 +26,12 @@ Routes:
 
 import uuid
 import unicodedata
+import json
+import threading
+import time
+from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 import audit
 import config
@@ -37,6 +41,46 @@ import stylometry
 
 app = Flask(__name__)
 
+capstone_log_lock = threading.Lock()
+
+@app.before_request
+def start_capstone_timer():
+    g.capstone_started_at = time.perf_counter()
+
+@app.after_request
+def log_capstone_run(response):
+    started = getattr(g, "capstone_started_at", None)
+    duration_ms = round((time.perf_counter() - started) * 1000, 3) if started else None
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = request.get_data(as_text=True) or None
+
+    output = response.get_json(silent=True)
+    if output is None:
+        output = response.get_data(as_text=True)[:1000] or None
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "method": request.method,
+        "path": request.path,
+        "input": payload,
+        "output": output,
+        "status_code": response.status_code,
+        "duration_ms": duration_ms,
+        "success": response.status_code < 400,
+    }
+
+    try:
+        log_path = config.LOG_DIR / "capstone_runs.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with capstone_log_lock:
+            with log_path.open("a", encoding="utf-8") as log_file:
+                log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        app.logger.exception("Could not write capstone run log")
+
+    return response
 
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
 # Off until you turn it on. In unit 8, Milestone 1:

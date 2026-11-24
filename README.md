@@ -702,3 +702,57 @@ I am extending Provenance Guard using Shape B — Harden Against Failure. The ex
 - Changing the detection model, stylometry signal, scoring weights, or classification thresholds.
 - Reworking multilingual text detection or adding new detection capabilities.
 - Public hosting or redesigning the application interface.
+
+**Instrumentation**
+
+The application writes structured request/response records to `logs/capstone_runs.jsonl`, separately from the existing audit log. Each record includes a UTC timestamp, HTTP method, endpoint, input, output, status code, application processing duration, and success indicator.
+
+I verified both a successful `/ping` request and a rejected `/appeal` request. The rejected request returned HTTP 400 with the expected `missing_field` error and was recorded with `success: false`.
+
+**Sample Run Log**
+
+The following ten consecutive successful `/ping` measurement records and one rejected `/appeal` request were copied from `logs/capstone_runs.jsonl`.
+
+```json
+{"timestamp": "2026-11-24T10:28:54.060870+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.611, "success": true}
+{"timestamp": "2026-11-24T10:28:54.178864+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.337, "success": true}
+{"timestamp": "2026-11-24T10:28:54.547727+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 1.105, "success": true}
+{"timestamp": "2026-11-24T10:28:54.869346+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.678, "success": true}
+{"timestamp": "2026-11-24T10:28:55.019107+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.264, "success": true}
+{"timestamp": "2026-11-24T10:28:55.167830+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.555, "success": true}
+{"timestamp": "2026-11-24T10:28:55.307287+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.297, "success": true}
+{"timestamp": "2026-11-24T10:28:55.477336+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.41, "success": true}
+{"timestamp": "2026-11-24T10:28:55.603004+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.26, "success": true}
+{"timestamp": "2026-11-24T10:28:55.725536+00:00", "method": "POST", "path": "/ping", "input": {"message": "measurement"}, "output": {"ok": true, "service": "provenance-guard", "you_sent": "measurement"}, "status_code": 200, "duration_ms": 0.259, "success": true}
+```
+
+Rejected `/appeal` request (HTTP 400):
+
+```json
+{
+  "timestamp": "2026-11-24T10:24:21.628779+00:00",
+  "method": "POST",
+  "path": "/appeal",
+  "input": {},
+  "output": {
+    "error": "missing_field",
+    "message": "Both content_id and reasoning are required."
+  },
+  "status_code": 400,
+  "duration_ms": 1.689,
+  "success": false
+}
+```
+
+**What It Costs**
+
+This project runs locally and does not use a paid API or hosted inference service for these measurements.
+
+I measured application processing time using the `duration_ms` field in the structured run log. I sent ten POST requests to `/ping` with the input `{"message":"measurement"}`.
+
+- Successful requests: 10 out of 10
+- Average application processing time: 0.4776 ms per request
+- Fastest: 0.259 ms
+- Slowest: 1.105 ms
+
+This is a measured local compute-time proxy, not a monetary hosting or API cost. The measurement covers the `/ping` endpoint, not GPT-2 inference.
