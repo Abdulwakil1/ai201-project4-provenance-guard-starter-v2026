@@ -40,12 +40,16 @@ class AppealRejectionTests(unittest.TestCase):
             label="human",
         )
 
-    def assert_rejection(self, response, status, reason):
+        self.original_decision = audit.entries_for("content-123")[0].copy()
+
+    def assert_rejection(self, response, status, reason, message):
         self.assertEqual(response.status_code, status)
 
         body = response.get_json()
         self.assertEqual(set(body.keys()), {"error", "message"})
         self.assertEqual(body["error"], reason)
+        self.assertEqual(body["message"], message)
+        self.assertEqual(audit.entries_for("content-123")[0], self.original_decision)
 
         rejected = [
             entry for entry in audit.read_entries()
@@ -63,9 +67,7 @@ class AppealRejectionTests(unittest.TestCase):
     def test_non_object_request(self):
         response = self.client.post("/appeal", json=[])
 
-        entry = self.assert_rejection(
-            response, 400, "invalid_request"
-        )
+        entry = self.assert_rejection(response, 400, "invalid_request", "Request body must be a JSON object.")
         self.assertEqual(entry["creator_id"], "unknown")
 
     def test_missing_field(self):
@@ -74,7 +76,7 @@ class AppealRejectionTests(unittest.TestCase):
             json={"content_id": "content-123"},
         )
 
-        self.assert_rejection(response, 400, "missing_field")
+        self.assert_rejection(response, 400, "missing_field", "Both content_id and reasoning are required.")
 
     def test_invalid_content_id(self):
         response = self.client.post(
@@ -82,7 +84,7 @@ class AppealRejectionTests(unittest.TestCase):
             json={"content_id": " ", "reasoning": "Please review."},
         )
 
-        self.assert_rejection(response, 400, "invalid_field")
+        self.assert_rejection(response, 400, "invalid_field", "content_id must be a non-empty string.")
 
     def test_invalid_reasoning(self):
         response = self.client.post(
@@ -90,9 +92,7 @@ class AppealRejectionTests(unittest.TestCase):
             json={"content_id": "content-123", "reasoning": " "},
         )
 
-        entry = self.assert_rejection(
-            response, 400, "invalid_field"
-        )
+        entry = self.assert_rejection(response, 400, "invalid_field", "reasoning must be a non-empty string.")
         self.assertEqual(entry["creator_id"], "creator-123")
 
     def test_reasoning_too_long(self):
@@ -104,7 +104,7 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        self.assert_rejection(response, 400, "field_too_long")
+        self.assert_rejection(response, 400, "field_too_long", "reasoning must not exceed 2000 characters.")
 
     def test_content_not_found(self):
         response = self.client.post(
@@ -115,9 +115,7 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        entry = self.assert_rejection(
-            response, 404, "content_not_found"
-        )
+        entry = self.assert_rejection(response, 404, "content_not_found", "No decision was found for this content_id.")
         self.assertEqual(entry["content_id"], "missing-id")
 
     def test_creator_not_found(self):
@@ -125,6 +123,7 @@ class AppealRejectionTests(unittest.TestCase):
             content_id="no-creator",
             creator_id="",
         )
+        original = audit.entries_for("no-creator")[0].copy()
 
         response = self.client.post(
             "/appeal",
@@ -134,9 +133,8 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        entry = self.assert_rejection(
-            response, 500, "creator_not_found"
-        )
+        entry = self.assert_rejection(response, 500, "creator_not_found", "The original decision has no creator_id.")
+        self.assertEqual(audit.entries_for("no-creator")[0], original)
         self.assertEqual(entry["creator_id"], "unknown")
 
     def test_rejected_appeal_preserves_original_decision(self):
