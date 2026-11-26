@@ -4,11 +4,21 @@ These criteria define the expected behavior of the Shape B extension before form
 
 ## 1. Consistent rejection responses
 
-All seven rejected `/appeal` request paths must return their expected HTTP status and a JSON response containing both `error` and `message` fields.
+All seven rejected `/appeal` request paths must return the expected HTTP status and a JSON response containing the correct `error` code and `message`.
 
-**Pass condition:** All seven rejection cases return the expected status and both fields with non-empty values.
+**Pass condition:** Each of the following rejection scenarios must return the specified HTTP status, error code, and message:
 
-**Why this target:** The seven rejection paths represent the different ways an appeal can be rejected. Consistent responses make errors predictable for clients and easier to diagnose. Testing every path prevents one correctly handled rejection from masking inconsistent behavior elsewhere.
+1. Request body is not a JSON object — HTTP 400; `invalid_request`; "Request body must be a JSON object."
+2. Either `content_id` or `reasoning` is missing — HTTP 400; `missing_field`; "Both content_id and reasoning are required."
+3. `content_id` is not a non-empty string — HTTP 400; `invalid_field`; "content_id must be a non-empty string."
+4. `reasoning` is not a non-empty string — HTTP 400; `invalid_field`; "reasoning must be a non-empty string."
+5. `reasoning` exceeds 2,000 characters — HTTP 400; `field_too_long`; "reasoning must not exceed 2000 characters."
+6. No existing decision is found for the supplied `content_id` — HTTP 404; `content_not_found`; "No decision was found for this content_id."
+7. The original decision has no `creator_id` — HTTP 500; `creator_not_found`; "The original decision has no creator_id."
+
+Every rejection response must contain both `error` and `message` fields with the expected non-empty values.
+
+**Why this target:** The seven rejection paths represent the different ways an appeal can be rejected. Specifying the expected status, error code, and message makes each outcome independently verifiable, makes errors predictable for clients, and makes failures easier to diagnose. Testing every path prevents one correctly handled rejection from masking inconsistent behavior elsewhere.
 
 ## 2. Rejection audit integrity
 
