@@ -255,7 +255,7 @@ def submit():
         if (
             isinstance(candidate_creator_id, str)
             and candidate_creator_id.strip()
-            and len(candidate_creator_id) <= 200
+            and len(candidate_creator_id) <= config.MAX_CREATOR_ID_LENGTH
         ):
             creator_id_for_log = candidate_creator_id.strip()
 
@@ -263,6 +263,7 @@ def submit():
         audit.log_rejection(
             creator_id=creator_id_for_log,
             reason=reason,
+            endpoint="/submit",
         )
         return jsonify({
             "error": reason,
@@ -296,10 +297,10 @@ def submit():
             "creator_id must be a non-empty string.",
         )
 
-    if len(text) > 2000 or len(creator_id) > 200:
+    if len(text) > config.MAX_TEXT_LENGTH or len(creator_id) > config.MAX_CREATOR_ID_LENGTH:
         return reject(
             "field_too_long",
-            "text must not exceed 2000 characters and creator_id must not exceed 200 characters.",
+            f"text must not exceed {config.MAX_TEXT_LENGTH} characters and creator_id must not exceed {config.MAX_CREATOR_ID_LENGTH} characters.",
         )
     if any(
         unicodedata.category(char) == "Cc" and char not in "\n\r\t"
@@ -418,10 +419,10 @@ def appeal():
             "reasoning must be a non-empty string.",
         )
 
-    if len(reasoning) > 2000:
+    if len(reasoning) > config.MAX_REASONING_LENGTH:
         return reject(
             "field_too_long",
-            "reasoning must not exceed 2000 characters.",
+            f"reasoning must not exceed {config.MAX_REASONING_LENGTH} characters.",
         )
 
     content_id = content_id.strip()

@@ -61,6 +61,13 @@ After receiving the result, a writer who disagrees with the decision can use the
 
 The `/submit` endpoint accepts a JSON object containing the text to analyze and the creator's identifier.
 
+Input length limits are centralized in `config.py`:
+- `MAX_TEXT_LENGTH`: maximum submission text length (2,000 characters).
+- `MAX_CREATOR_ID_LENGTH`: maximum creator ID length (200 characters).
+- `MAX_REASONING_LENGTH`: maximum appeal reasoning length (2,000 characters).
+
+The `/submit` and `/appeal` endpoints use these settings for validation and their corresponding `field_too_long` error messages.
+
 | Field        | Type   | Requirement                                                                        |
 | ------------ | ------ | ---------------------------------------------------------------------------------- |
 | `text`       | string | Required. Must not be empty or whitespace-only and cannot exceed 2,000 characters. |

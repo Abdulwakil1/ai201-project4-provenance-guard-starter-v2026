@@ -63,6 +63,23 @@ class AppealRejectionTests(unittest.TestCase):
 
         return rejected[0]
 
+    def assert_submit_rejection(self, response, reason, message, expected_creator_id):
+        self.assertEqual(response.status_code, 400)
+
+        body = response.get_json()
+        self.assertEqual(set(body.keys()), {"error", "message"})
+        self.assertEqual(body["error"], reason)
+        self.assertEqual(body["message"], message)
+
+        rejected = [
+            entry for entry in audit.read_entries()
+            if entry.get("event") == "rejected"
+        ]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["endpoint"], "/submit")
+        self.assertEqual(rejected[0]["reason"], reason)
+        self.assertEqual(rejected[0]["creator_id"], expected_creator_id)
+
     def test_non_object_request(self):
         response = self.client.post("/appeal", json=[])
 
@@ -99,11 +116,11 @@ class AppealRejectionTests(unittest.TestCase):
             "/appeal",
             json={
                 "content_id": "content-123",
-                "reasoning": "x" * 2001,
+                "reasoning": "x" * (config.MAX_REASONING_LENGTH + 1),
             },
         )
 
-        self.assert_rejection(response, 400, "field_too_long", "reasoning must not exceed 2000 characters.", "content-123")
+        self.assert_rejection(response, 400, "field_too_long", f"reasoning must not exceed {config.MAX_REASONING_LENGTH} characters.", "content-123")
 
     def test_content_not_found(self):
         response = self.client.post(
@@ -143,7 +160,7 @@ class AppealRejectionTests(unittest.TestCase):
             "/appeal",
             json={
                 "content_id": "content-123",
-                "reasoning": "x" * 2001,
+                "reasoning": "x" * (config.MAX_REASONING_LENGTH + 1),
             },
         )
 
@@ -200,6 +217,38 @@ class AppealRejectionTests(unittest.TestCase):
                 "you_sent": "capstone check",
                 "service": "provenance-guard",
             },
+        )
+
+    def test_submission_text_too_long(self):
+        response = self.client.post(
+            "/submit",
+            json={
+                "text": "x" * (config.MAX_TEXT_LENGTH + 1),
+                "creator_id": "creator-submit",
+            },
+        )
+
+        self.assert_submit_rejection(
+            response,
+            "field_too_long",
+            f"text must not exceed {config.MAX_TEXT_LENGTH} characters and creator_id must not exceed {config.MAX_CREATOR_ID_LENGTH} characters.",
+            "creator-submit",
+        )
+
+    def test_submission_creator_id_too_long(self):
+        response = self.client.post(
+            "/submit",
+            json={
+                "text": "This is a valid test submission.",
+                "creator_id": "c" * (config.MAX_CREATOR_ID_LENGTH + 1),
+            },
+        )
+
+        self.assert_submit_rejection(
+            response,
+            "field_too_long",
+            f"text must not exceed {config.MAX_TEXT_LENGTH} characters and creator_id must not exceed {config.MAX_CREATOR_ID_LENGTH} characters.",
+            "unknown",
         )
 
     @patch("detector.model_signal", return_value=0.2)

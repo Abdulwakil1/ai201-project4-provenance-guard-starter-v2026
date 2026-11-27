@@ -82,6 +82,13 @@ AI_THRESHOLD = 0.65
 # prints the bands; the reachable range is a different question.
 
 
+# ─── Input validation limits ────────────────────────────────────────────────
+
+MAX_TEXT_LENGTH = 2000
+MAX_CREATOR_ID_LENGTH = 200
+MAX_REASONING_LENGTH = 2000
+
+
 # ─── Rate limiting (UNIT 8) ──────────────────────────────────────────────────
 # Off in unit 7. You turn it on and choose the numbers in unit 8, Milestone 1.
 #
