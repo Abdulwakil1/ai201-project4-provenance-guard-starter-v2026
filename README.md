@@ -770,7 +770,7 @@ I measured application processing time using the `duration_ms` field in the stru
 
 This is a measured local compute-time proxy, not a monetary hosting or API cost. The measurement covers the `/ping` endpoint, not GPT-2 inference.
 
-At an illustrative volume of 100 requests per day, applying this measured `/ping` average gives 47.76 ms of cumulative application processing time per day (100 × 0.4776 ms). This is only arithmetic based on the `/ping` measurement; it is not a forecast for `/submit`, GPT-2 inference, total elapsed user wait time, or monetary cost.
+Assuming one request per person per day, 100 people would generate 100 requests daily. Applying the measured `/ping` average: 100 people × 1 request per person per day × 0.4776 ms per request = **47.76 ms of cumulative application processing time per day**. This is arithmetic based only on the `/ping` measurement; it is not a forecast for `/submit`, GPT-2 inference, total elapsed user wait time, or monetary cost.
 
 ### Formal Evaluation
 
@@ -942,7 +942,9 @@ The capstone criteria and regression tests cover the Shape B appeal-hardening ex
 - No ten-times-normal-rate load test or hosted deployment test is included in these results.
 - The local Path B setup is documented in [`RUNNING.md`](RUNNING.md), but these tests do not establish production readiness, multi-user behavior, or performance under sustained traffic.
 
-A useful next measurement would time real `/submit` requests after the model is loaded, report the individual durations and average, and keep model-loading time separate from warm-request processing time. A separate controlled load test would be needed before making claims about higher request rates.
+None of the five original acceptance criteria was missed. However, Criterion 5 was originally too narrow: it checked a successful mocked `/submit` and `/ping`, but did not require oversized-submission rejection tests. I would tighten that target to require oversized text and creator IDs to return HTTP 400 with `field_too_long` and exactly one `/submit` rejection audit record; the Milestone 6 improvement added those tests. I stopped short of real-model inference benchmarking and load testing because this extension focused on local Shape B appeal hardening, and those measurements require a separate benchmark and test environment.
+
+If I had another unit, my first step would be to measure real `/submit` requests after GPT-2 has loaded, recording individual durations and the average separately from model startup. I would do this first because the existing `/ping` measurement and mocked `/submit` test do not reveal actual inference time, which is the biggest remaining performance unknown.
 
 ### How I Used AI
 
@@ -969,3 +971,9 @@ A useful next measurement would time real `/submit` requests after the model is 
 - _What came back:_ The three trial logs showed all 11 tests passing in each run. The review also clarified that the recorded `/ping` measurements represented application processing time, not GPT-2 inference time or a complete production-performance measurement.
 
 - _What I changed:_ I documented the three trial results, recorded the measured `/ping` average and the illustrative 100-requests-per-day calculation, and explicitly identified what remains untested, including real `/submit` inference timing, 10x load testing, and hosted deployment.
+
+**Moment 4 — Centralizing validation limits and completing Milestone 6**
+
+- _What I asked for:_ Help interpreting the grader feedback about hardcoded input limits, deciding on a focused improvement, and checking that the new tests and repeated trial results supported the documentation.
+- _What came back:_ The review identified the three limits to centralize in `config.py` and the two oversized `/submit` cases to add to the regression suite. It also helped distinguish the original five criteria from the additional coverage.
+- _What I changed:_ I centralized the text, creator ID, and reasoning limits; added tests for oversized submission text and creator IDs; ran the expanded 13-test suite three times; and documented the before-and-after results, verdicts, diagnosis, and remaining limitations.
