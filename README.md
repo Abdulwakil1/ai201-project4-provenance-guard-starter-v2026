@@ -700,11 +700,15 @@ I would prioritize avoiding false accusations by making borderline cases more li
 
 ## Capstone
 
-### What This Extends
+**What This Extends**
 
-I am extending Provenance Guard using Shape B — Harden Against Failure. The extension focuses on the `/appeal` endpoint: rejected appeals must return a consistent error response and create an audit record without changing the original decision. I will add repeatable tests to verify rejection behavior and audit integrity. The application will run locally with structured logs using Path B.
+I am extending Provenance Guard. The extension focuses on the `/appeal` endpoint: rejected appeals must return a consistent error response and create an audit record without changing the original decision. I will add repeatable tests to verify rejection behavior and audit integrity. The application will run locally with structured logs using Path B.
 
-### Running It
+**The Shape**
+
+I chose Shape B — Harden Against Failure. The out-of-scope items are listed below.
+
+**Running It**
 
 The project uses Path B: local execution with structured logs. The clean-checkout setup, environment requirements, dependency installation, test command, and local server startup instructions are documented in [`RUNNING.md`](RUNNING.md).
 
@@ -771,6 +775,8 @@ I measured application processing time using the `duration_ms` field in the stru
 This is a measured local compute-time proxy, not a monetary hosting or API cost. The measurement covers the `/ping` endpoint, not GPT-2 inference.
 
 Assuming one request per person per day, 100 people would generate 100 requests daily. Applying the measured `/ping` average: 100 people × 1 request per person per day × 0.4776 ms per request = **47.76 ms of cumulative application processing time per day**. This is arithmetic based only on the `/ping` measurement; it is not a forecast for `/submit`, GPT-2 inference, total elapsed user wait time, or monetary cost.
+
+**Run Log and Verdicts**
 
 ### Formal Evaluation
 
@@ -865,6 +871,8 @@ Ran 11 tests in 0.094s
 OK
 ```
 
+**The Improvement**
+
 #### Milestone 5 Improvement
 
 The appeal regression tests were strengthened before the final Milestone 5 trials:
@@ -933,7 +941,7 @@ The grader identified hardcoded input limits in `app.py`. I addressed this by:
 
 The result is stronger validation coverage and easier maintenance. It does not demonstrate improved model accuracy, GPT-2 inference speed, or production-load performance. Exact maximum-length acceptance boundaries were not separately tested.
 
-### What's Still Broken / What's Still Left
+**What's Still Broken**
 
 The capstone criteria and regression tests cover the Shape B appeal-hardening extension. Several areas remain outside the evidence collected so far:
 
@@ -946,7 +954,7 @@ None of the five original acceptance criteria was missed. However, Criterion 5 w
 
 If I had another unit, my first step would be to measure real `/submit` requests after GPT-2 has loaded, recording individual durations and the average separately from model startup. I would do this first because the existing `/ping` measurement and mocked `/submit` test do not reveal actual inference time, which is the biggest remaining performance unknown.
 
-### How I Used AI
+**How I Used AI**
 
 **Moment 1 — Reviewing capstone feedback and refining acceptance criteria**
 
