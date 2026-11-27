@@ -693,9 +693,15 @@ I would prioritize avoiding false accusations by making borderline cases more li
 
 ## Capstone
 
-**The Shape**
+### What This Extends
 
 I am extending Provenance Guard using Shape B — Harden Against Failure. The extension focuses on the `/appeal` endpoint: rejected appeals must return a consistent error response and create an audit record without changing the original decision. I will add repeatable tests to verify rejection behavior and audit integrity. The application will run locally with structured logs using Path B.
+
+### Running It
+
+The project uses Path B: local execution with structured logs. The clean-checkout setup, environment requirements, dependency installation, test command, and local server startup instructions are documented in [`RUNNING.md`](RUNNING.md).
+
+In brief, create and activate a virtual environment, install `requirements.txt`, run `python test.py`, and start the service with `python app.py`. The service listens at `http://127.0.0.1:5000`. The first request requiring model scoring downloads the local GPT-2 model; no API key or hosted inference service is used.
 
 **Out of Scope**
 
@@ -756,3 +762,84 @@ I measured application processing time using the `duration_ms` field in the stru
 - Slowest: 1.105 ms
 
 This is a measured local compute-time proxy, not a monetary hosting or API cost. The measurement covers the `/ping` endpoint, not GPT-2 inference.
+
+At an illustrative volume of 100 requests per day, applying this measured `/ping` average gives 47.76 ms of cumulative application processing time per day (100 × 0.4776 ms). This is only arithmetic based on the `/ping` measurement; it is not a forecast for `/submit`, GPT-2 inference, total elapsed user wait time, or monetary cost.
+
+### Formal Evaluation
+
+The five acceptance criteria are defined in [`capstone_criteria.md`](capstone_criteria.md). Each criterion was evaluated in three separate trials using the regression suite. Each trial ran the same 11 tests; the repeated runs check reproducibility, not performance across independent datasets or environments.
+
+| Trial | Tests passed | Test-suite duration | Overall result |
+| ----- | -----------: | ------------------: | -------------- |
+| 1     |        11/11 |             0.094 s | MET            |
+| 2     |        11/11 |             0.083 s | MET            |
+| 3     |        11/11 |             0.100 s | MET            |
+
+The complete terminal outputs are preserved in the repository:
+
+- [Trial 1 log](results/capstone_trial_1.log)
+- [Trial 2 log](results/capstone_trial_2.log)
+- [Trial 3 log](results/capstone_trial_3.log)
+
+#### Criteria verdicts
+
+| Criterion                                         | Trial 1 | Trial 2 | Trial 3 | Evidence covered                                                                                              |
+| ------------------------------------------------- | ------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| 1. Consistent rejection responses                 | MET     | MET     | MET     | All seven rejection paths; exact HTTP statuses, error codes, and messages                                     |
+| 2. Rejection audit integrity                      | MET     | MET     | MET     | Exactly one rejection record per rejected request, with the expected endpoint, reason, and `content_id` value |
+| 3. Original decision preservation after rejection | MET     | MET     | MET     | Original decision record compared before and after rejected appeals                                           |
+| 4. Successful appeal preservation                 | MET     | MET     | MET     | HTTP 200, `under_review`, appeal audit record, and unchanged original decision                                |
+| 5. Existing route regression protection           | MET     | MET     | MET     | `/ping` response and valid mocked `/submit` response and decision audit record                                |
+
+Each trial ran `python -m unittest -v test_appeal_rejections.py`. The suite includes the seven rejection-path tests, preservation checks, a successful appeal test, a `/ping` test, and a mocked `/submit` regression test. The `/submit` test mocks the detector and scoring functions so it verifies route behavior without downloading or running GPT-2.
+
+#### Diagnosis
+
+All five criteria were MET in all three recorded trials. There were no failed test cases in these final runs, so there is no observed failure from these trials to diagnose. The repeated results support the tested rejection, audit, preservation, and route-regression behaviors. They do not establish performance under production traffic or the latency of real model inference.
+
+### Capstone Improvement
+
+I strengthened the regression tests after reviewing the evaluation criteria and the earlier test assertions.
+
+- Rejection tests now compare the original decision record before and after each rejected appeal.
+- The audit assertions verify the exact expected `content_id`, including `None` when the request does not provide a usable content ID, rather than merely checking that a present value is non-empty.
+- The assertions also verify the expected HTTP status, exact JSON response keys, error code, message, audit reason, and `/appeal` endpoint.
+
+The final three trial logs above were generated after these stronger assertions were added. This improvement strengthens the evidence and test precision; it did not change the application's scoring model or rejection behavior.
+
+### What's Still Broken / What's Still Left
+
+The capstone criteria and regression tests cover the Shape B appeal-hardening extension. Several areas remain outside the evidence collected so far:
+
+- The ten-request timing measurement above uses `/ping`. It does not measure GPT-2 inference or the full `/submit` processing path.
+- The `/submit` regression test uses mocked signal and scoring functions. It verifies route integration and audit behavior, not real-model inference latency.
+- No ten-times-normal-rate load test or hosted deployment test is included in these results.
+- The local Path B setup is documented in [`RUNNING.md`](RUNNING.md), but these tests do not establish production readiness, multi-user behavior, or performance under sustained traffic.
+
+A useful next measurement would time real `/submit` requests after the model is loaded, report the individual durations and average, and keep model-loading time separate from warm-request processing time. A separate controlled load test would be needed before making claims about higher request rates.
+
+### How I Used AI
+
+**Moment 1 — Reviewing capstone feedback and refining acceptance criteria**
+
+- _What I asked for:_ Help interpreting the capstone grader's feedback and identifying which requirements needed stronger evidence or clearer acceptance criteria.
+
+- _What came back:_ The feedback highlighted the need to verify all seven rejected-appeal scenarios, check exact response details, confirm audit records, and ensure rejected appeals did not change the original decision.
+
+- _What I changed:_ I clarified the five capstone criteria, documented the expected status codes, error codes, and messages for each rejection scenario, and made the evaluation expectations more specific.
+
+**Moment 2 — Strengthening appeal rejection tests**
+
+- _What I asked for:_ Help reviewing the regression tests to make sure they verified the rejection responses and audit behavior rather than only checking whether an error occurred.
+
+- _What came back:_ The review identified the importance of checking exact response keys and values, exactly one rejection audit record, the expected rejection reason and endpoint, the associated `content_id`, and preservation of the original decision.
+
+- _What I changed:_ I strengthened the test assertions and expanded the rejection tests to cover all seven scenarios. I also retained tests for successful appeals, `/ping`, and `/submit` so the existing routes remained covered.
+
+**Moment 3 — Evaluating repeatability and documenting limitations\*\***
+
+- _What I asked for:_ Help organizing the formal evaluation results and documenting what the local instrumentation actually measured.
+
+- _What came back:_ The three trial logs showed all 11 tests passing in each run. The review also clarified that the recorded `/ping` measurements represented application processing time, not GPT-2 inference time or a complete production-performance measurement.
+
+- _What I changed:_ I documented the three trial results, recorded the measured `/ping` average and the illustrative 100-requests-per-day calculation, and explicitly identified what remains untested, including real `/submit` inference timing, 10x load testing, and hosted deployment.

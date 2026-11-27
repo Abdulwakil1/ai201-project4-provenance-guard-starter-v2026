@@ -42,7 +42,7 @@ class AppealRejectionTests(unittest.TestCase):
 
         self.original_decision = audit.entries_for("content-123")[0].copy()
 
-    def assert_rejection(self, response, status, reason, message):
+    def assert_rejection(self, response, status, reason, message, expected_content_id=None):
         self.assertEqual(response.status_code, status)
 
         body = response.get_json()
@@ -59,8 +59,7 @@ class AppealRejectionTests(unittest.TestCase):
         self.assertEqual(len(rejected), 1)
         self.assertEqual(rejected[0]["reason"], reason)
         self.assertEqual(rejected[0]["endpoint"], "/appeal")
-        if rejected[0].get("content_id") is not None:
-            self.assertTrue(rejected[0]["content_id"])
+        self.assertEqual(rejected[0].get("content_id"), expected_content_id)
 
         return rejected[0]
 
@@ -92,7 +91,7 @@ class AppealRejectionTests(unittest.TestCase):
             json={"content_id": "content-123", "reasoning": " "},
         )
 
-        entry = self.assert_rejection(response, 400, "invalid_field", "reasoning must be a non-empty string.")
+        entry = self.assert_rejection(response, 400, "invalid_field", "reasoning must be a non-empty string.", "content-123")
         self.assertEqual(entry["creator_id"], "creator-123")
 
     def test_reasoning_too_long(self):
@@ -104,7 +103,7 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        self.assert_rejection(response, 400, "field_too_long", "reasoning must not exceed 2000 characters.")
+        self.assert_rejection(response, 400, "field_too_long", "reasoning must not exceed 2000 characters.", "content-123")
 
     def test_content_not_found(self):
         response = self.client.post(
@@ -115,7 +114,7 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        entry = self.assert_rejection(response, 404, "content_not_found", "No decision was found for this content_id.")
+        entry = self.assert_rejection(response, 404, "content_not_found", "No decision was found for this content_id.", "missing-id")
         self.assertEqual(entry["content_id"], "missing-id")
 
     def test_creator_not_found(self):
@@ -133,7 +132,7 @@ class AppealRejectionTests(unittest.TestCase):
             },
         )
 
-        entry = self.assert_rejection(response, 500, "creator_not_found", "The original decision has no creator_id.")
+        entry = self.assert_rejection(response, 500, "creator_not_found", "The original decision has no creator_id.", "no-creator")
         self.assertEqual(audit.entries_for("no-creator")[0], original)
         self.assertEqual(entry["creator_id"], "unknown")
 
