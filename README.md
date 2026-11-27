@@ -793,6 +793,71 @@ The complete terminal outputs are preserved in the repository:
 
 Each trial ran `python -m unittest -v test_appeal_rejections.py`. The suite includes the seven rejection-path tests, preservation checks, a successful appeal test, a `/ping` test, and a mocked `/submit` regression test. The `/submit` test mocks the detector and scoring functions so it verifies route behavior without downloading or running GPT-2.
 
+#### Test Evidence
+
+The following output is from Trial 1 (`results/capstone_trial_1.log`). The same 11 tests passed in Trials 2 and 3.
+
+**Criterion 1 — Consistent rejection responses**
+
+Source: `test_appeal_rejections.py`, rejection test methods and `assert_rejection()`.
+
+The seven rejection tests verify the expected HTTP status, exact JSON keys (`error` and `message`), error code, and message for each rejection scenario.
+
+```text
+test_content_not_found ... ok
+test_creator_not_found ... ok
+test_invalid_content_id ... ok
+test_invalid_reasoning ... ok
+test_missing_field ... ok
+test_non_object_request ... ok
+test_reasoning_too_long ... ok
+```
+
+**Criterion 2 — Rejection audit integrity**
+
+Source: `test_appeal_rejections.py`, `assert_rejection()`.
+
+For each rejected request, the helper verifies exactly one rejection audit record, the expected reason, the `/appeal` endpoint, and the expected `content_id` when available. The non-object and creator-not-found tests also verify the expected fallback `creator_id`.
+
+**Criterion 3 — Original decision preservation**
+
+Source: `test_appeal_rejections.py`, `assert_rejection()` and `test_rejected_appeal_preserves_original_decision()`.
+
+The tests compare the original decision before and after rejection. The dedicated preservation test also verifies that the rejection record is appended without replacing the original decision.
+
+```text
+test_rejected_appeal_preserves_original_decision ... ok
+```
+
+**Criterion 4 — Successful appeal preservation**
+
+Source: `test_appeal_rejections.py`, `test_successful_appeal_preserves_original_decision()`.
+
+The test verifies HTTP 200, `under_review`, an appeal audit record, preservation of the original decision, and no rejection record.
+
+```text
+test_successful_appeal_preserves_original_decision ... ok
+```
+
+**Criterion 5 — Existing route regression protection**
+
+Source: `test_appeal_rejections.py`, `test_ping()` and `test_successful_submission()`.
+
+The `/ping` test checks the expected response. The mocked `/submit` test checks the decision response, scoring fields, and audit record without running GPT-2 inference.
+
+```text
+test_ping ... ok
+test_successful_submission ... ok
+```
+
+**Trial 1 summary**
+
+```text
+Ran 11 tests in 0.094s
+
+OK
+```
+
 #### Diagnosis
 
 All five criteria were MET in all three recorded trials. There were no failed test cases in these final runs, so there is no observed failure from these trials to diagnose. The repeated results support the tested rejection, audit, preservation, and route-regression behaviors. They do not establish performance under production traffic or the latency of real model inference.
@@ -836,7 +901,7 @@ A useful next measurement would time real `/submit` requests after the model is 
 
 - _What I changed:_ I strengthened the test assertions and expanded the rejection tests to cover all seven scenarios. I also retained tests for successful appeals, `/ping`, and `/submit` so the existing routes remained covered.
 
-**Moment 3 — Evaluating repeatability and documenting limitations\*\***
+**Moment 3 — Evaluating repeatability and documenting limitations**
 
 - _What I asked for:_ Help organizing the formal evaluation results and documenting what the local instrumentation actually measured.
 
