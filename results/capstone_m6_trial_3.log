@@ -1,0 +1,18 @@
+test_content_not_found (test_appeal_rejections.AppealRejectionTests.test_content_not_found) ... ok
+test_creator_not_found (test_appeal_rejections.AppealRejectionTests.test_creator_not_found) ... ok
+test_invalid_content_id (test_appeal_rejections.AppealRejectionTests.test_invalid_content_id) ... ok
+test_invalid_reasoning (test_appeal_rejections.AppealRejectionTests.test_invalid_reasoning) ... ok
+test_missing_field (test_appeal_rejections.AppealRejectionTests.test_missing_field) ... ok
+test_non_object_request (test_appeal_rejections.AppealRejectionTests.test_non_object_request) ... ok
+test_ping (test_appeal_rejections.AppealRejectionTests.test_ping) ... ok
+test_reasoning_too_long (test_appeal_rejections.AppealRejectionTests.test_reasoning_too_long) ... ok
+test_rejected_appeal_preserves_original_decision (test_appeal_rejections.AppealRejectionTests.test_rejected_appeal_preserves_original_decision) ... ok
+test_submission_creator_id_too_long (test_appeal_rejections.AppealRejectionTests.test_submission_creator_id_too_long) ... ok
+test_submission_text_too_long (test_appeal_rejections.AppealRejectionTests.test_submission_text_too_long) ... ok
+test_successful_appeal_preserves_original_decision (test_appeal_rejections.AppealRejectionTests.test_successful_appeal_preserves_original_decision) ... ok
+test_successful_submission (test_appeal_rejections.AppealRejectionTests.test_successful_submission) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.284s
+
+OK

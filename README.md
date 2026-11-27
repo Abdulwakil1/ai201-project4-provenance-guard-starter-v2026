@@ -865,19 +865,73 @@ Ran 11 tests in 0.094s
 OK
 ```
 
-#### Diagnosis
+#### Milestone 5 Improvement
 
-All five criteria were MET in all three recorded trials. There were no failed test cases in these final runs, so there is no observed failure from these trials to diagnose. The repeated results support the tested rejection, audit, preservation, and route-regression behaviors. They do not establish performance under production traffic or the latency of real model inference.
+The appeal regression tests were strengthened before the final Milestone 5 trials:
 
-### Capstone Improvement
+- Rejection tests compare the original decision record before and after each rejected appeal.
+- Audit assertions verify the exact expected `content_id`, including `None` when the request does not provide a usable content ID.
+- Assertions verify the expected HTTP status, exact JSON response keys, error code, message, audit reason, and `/appeal` endpoint.
 
-I strengthened the regression tests after reviewing the evaluation criteria and the earlier test assertions.
+The three Milestone 5 trial logs were generated after these stronger assertions were added. This improvement strengthened the evidence and test precision without changing the application scoring model or rejection behavior.
 
-- Rejection tests now compare the original decision record before and after each rejected appeal.
-- The audit assertions verify the exact expected `content_id`, including `None` when the request does not provide a usable content ID, rather than merely checking that a present value is non-empty.
-- The assertions also verify the expected HTTP status, exact JSON response keys, error code, message, audit reason, and `/appeal` endpoint.
+#### Milestone 6 Diagnosis
 
-The final three trial logs above were generated after these stronger assertions were added. This improvement strengthens the evidence and test precision; it did not change the application's scoring model or rejection behavior.
+All five original acceptance criteria were MET in all three Milestone 5 trials. There were no failed test cases in those final runs, so there is no observed failure stage or failure mechanism to diagnose. I did not invent a failure to satisfy this requirement.
+
+The results show no common failure pattern. However, Criterion 5 had a relatively narrow scope: it verified a successful mocked /submit request and /ping, but did not test oversized submission text or creator IDs. The criterion was met as written, but its coverage could be more comprehensive. I do not have evidence that the original targets were artificially low.
+
+If I tighten Criterion 5 in a future evaluation, I would require both successful mocked submission behavior and rejection of text or creator IDs exceeding their configured limits, including the expected HTTP 400 response and rejection audit record. The original committed criterion remains unchanged.
+
+**Milestone 6 criterion verdicts**
+
+| Criterion | Milestone 5 baseline | Milestone 6 after improvement |
+| --- | --- | --- |
+| 1. Consistent rejection responses | MET | MET |
+| 2. Rejection audit integrity | MET | MET |
+| 3. Original decision preservation after rejection | MET | MET |
+| 4. Successful appeal preservation | MET | MET |
+| 5. Existing route regression protection | MET | MET |
+
+There were no misses in either result set. The expanded suite retains the original appeal, audit, preservation, and route-regression checks, and adds two oversized-submission rejection tests.
+
+**Criterion I would tighten next: Criterion 5.** In addition to the existing successful mocked submission and `/ping` checks, require separate tests for text exceeding `MAX_TEXT_LENGTH` and creator IDs exceeding `MAX_CREATOR_ID_LENGTH`. Each must return HTTP 400 with `field_too_long` and create exactly one `/submit` rejection audit record. This is a proposed tighter target for a future evaluation, not a change to the original committed criterion.
+
+#### Milestone 6 Before-and-After Results
+
+The Milestone 5 baseline used the original 11-test suite. After the improvement, the expanded 13-test suite ran three times.
+
+| Trial | Before: Milestone 5 | After: Milestone 6 |
+| ----- | ------------------- | ------------------ |
+| 1 | 11/11 passed; 0.094 s | 13/13 passed; 0.153 s |
+| 2 | 11/11 passed; 0.083 s | 13/13 passed; 0.097 s |
+| 3 | 11/11 passed; 0.100 s | 13/13 passed; 0.284 s |
+
+**Milestone 6 trial logs:**
+
+- [Trial 1 log](results/capstone_m6_trial_1.log)
+- [Trial 2 log](results/capstone_m6_trial_2.log)
+- [Trial 3 log](results/capstone_m6_trial_3.log)
+
+All 13 tests passed in each new trial. The two additional tests cover oversized `/submit` text and creator IDs. The original 11-test logs remain preserved separately.
+
+The test-suite durations varied between trials. These measurements are not evidence of a performance improvement or regression; the improvement targeted configuration consistency and validation coverage, not execution speed.
+
+#### Milestone 6 Improvement
+
+**One improvement: centralize input validation limits and test oversized submissions.**
+
+The grader identified hardcoded input limits in `app.py`. I addressed this by:
+
+- Defining `MAX_TEXT_LENGTH`, `MAX_CREATOR_ID_LENGTH`, and `MAX_REASONING_LENGTH` in `config.py`.
+- Updating `/submit` and `/appeal` validation to use those configuration values.
+- Updating the corresponding `field_too_long` messages to use the same values.
+- Adding tests for submission text and creator IDs that exceed their configured limits.
+- Verifying that rejected `/submit` requests produce the expected response and one rejection audit record identifying the endpoint.
+
+**Did it help?** Yes. The limits now have one configuration source, and the expanded test suite verifies the two additional oversized-submission paths. All 13 tests passed in all three trials.
+
+The result is stronger validation coverage and easier maintenance. It does not demonstrate improved model accuracy, GPT-2 inference speed, or production-load performance. Exact maximum-length acceptance boundaries were not separately tested.
 
 ### What's Still Broken / What's Still Left
 
